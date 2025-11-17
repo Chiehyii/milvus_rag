@@ -1,0 +1,103 @@
+{
+  "課業輔導.md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=3229",
+    "status": ["一般生", "原住民", "中低收入戶", "清寒", "低收入戶", "境外生", "國際生", "僑生", "港澳生"],
+    "edu_system": ["大學部", "碩士班", "博士班"],
+    "subsidy_type":["獎勵金"]
+  },
+  "慈濟大學高教深耕學習增能獎補助辦法.md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=3132",
+    "status": ["一般生", "原住民", "中低收入戶", "清寒", "低收入戶", "境外生", "國際生", "僑生", "港澳生"],
+    "edu_system": ["專科", "大學部"],
+    "subsidy_type":["獎學金", "助學金"]
+  },
+  "新北市高級中等以上學校原住民學生獎學金.md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=3313",
+    "status": ["原住民", "中低收入戶", "低收入戶"],
+    "edu_system": ["五專", "二技", "專科", "大學部", "碩士班", "博士班"],
+    "subsidy_type":["獎學金"]
+  },
+  "校內工讀助學.md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=3182",
+    "status": ["一般生", "原住民", "中低收入戶", "清寒", "低收入戶", "境外生", "國際生", "僑生", "港澳生"],
+    "edu_system": ["五專", "二技", "專科", "大學部", "碩士班", "博士班"],
+    "subsidy_type":["助學金", "工讀"]
+  },
+  "海外交流補助.md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=3276",
+    "status": ["一般生", "原住民", "中低收入戶", "清寒", "低收入戶", "境外生", "國際生", "僑生", "港澳生"],
+    "edu_system": ["五專", "二技", "專科", "大學部", "碩士班", "博士班"],
+    "subsidy_type":["海外交流","志工服務","社團交流"]
+  },
+  "桃園市原住民族學生獎助-生活津貼.md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=3484",
+    "status": ["原住民"],
+    "edu_system": ["五專", "二技", "專科", "大學部", "碩士班"],
+    "subsidy_type":["助學金", "生活津貼"]
+  },
+  "桃園市原住民族學生獎助-清寒獎助及優秀獎學金.md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=3308",
+    "status": ["原住民"],
+    "edu_system": ["五專", "二技", "專科", "大學部", "碩士班"],
+    "subsidy_type":["助學金", "獎學金"]
+  },
+  "明本學術奬學金(註冊組).md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=3032",
+    "status": ["一般生", "畢業生", "境外生", "國際生", "僑生", "港澳生"],
+    "edu_system": ["碩士班", "博士班"],
+    "subsidy_type":["獎學金"]
+  },
+  "就學貸款辦理資訊.md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=3038",
+    "status": ["一般生", "原住民", "中低收入戶", "清寒", "低收入戶"],
+    "edu_system": ["五專", "二技", "專科", "大學部", "碩士班", "博士班"],
+    "subsidy_type":["就學貸款", "助學金"]
+  },
+  "原住民族學生就學獎助(慈濟醫療法人).md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=3003",
+    "status": ["原住民"],
+    "edu_system": ["五專", "專科"],
+    "subsidy_type":["助學金", "獎學金"]
+  },
+  "原住民族學生就學獎助(慈濟基金會).md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=2974",
+    "status": ["原住民"],
+    "edu_system": ["五專", "專科"],
+    "subsidy_type":["助學金", "獎學金"]
+  },
+  "學生急難助學金(校內).md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=2418",
+    "status": ["一般生", "原住民", "中低收入戶", "清寒", "低收入戶", "境外生", "國際生", "僑生", "港澳生"],
+    "edu_system": ["五專", "二技", "專科", "大學部", "碩士班", "博士班"],
+    "subsidy_type":["急難救助", "助學金"]
+  },
+  "學生清寒獎助金.md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=2414",
+    "status": ["中低收入戶", "清寒", "低收入戶"],
+    "edu_system": ["五專", "二技", "專科", "大學部", "碩士班", "博士班"],
+    "subsidy_type":["助學金"]
+  },
+  "弱勢助學-生活助學金.md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=2775",
+    "status": ["中低收入戶", "弱勢學生", "低收入戶"],
+    "edu_system": ["五專", "二技", "專科", "大學部", "碩士班", "博士班"],
+    "subsidy_type":["助學金", "急難救助", "住宿補助", "生活津貼"]
+  },
+  "國際學生助學金辦法.md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=2420",
+    "status": ["境外生", "國際生", "僑生", "港澳生"],
+    "edu_system": ["大學部", "碩士班", "博士班", "五專", "二技"],
+    "subsidy_type":["助學金", "獎學金"]
+  },
+  "研究生奬學金(課務組).md": {
+    "source_url":"https://yizhu.tcu.edu.tw/?p=2824",
+    "status": ["一般生", "中低收入戶", "清寒", "低收入戶", "境外生", "國際生", "僑生", "港澳生", "原住民"],
+    "edu_system": ["碩士班", "博士班"],
+    "subsidy_type":["助學金", "獎學金"]
+  }
+}
+
+
+
+
+        
