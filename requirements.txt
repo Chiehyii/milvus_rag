@@ -38,3 +38,6 @@ ragas
 
 # --- Optional but recommended ---
 sentence-transformers  # embedding 常用，如 all-MiniLM
+
+# --- Database ---
+psycopg2-binary

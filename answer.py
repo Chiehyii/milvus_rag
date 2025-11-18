@@ -1,14 +1,15 @@
 import os
-import sys
-import sqlite3
+import psycopg2
 import time
 import json
-# sys.path.append(r'C:\AIChatbot\rag_PoC\advanced-rag')
+from dotenv import load_dotenv
 
 from openai import OpenAI
 from pymilvus import MilvusClient
-# from auto_filter import extract_filters_from_question, filters_to_expr
 from intent_classification import intent_classification
+
+# Load environment variables from .env file
+load_dotenv()
 
 zilliz_api_key = os.getenv("ZILLIZ_API_KEY")
 api_key = os.getenv("OPENAI_API_KEY")
@@ -164,33 +165,43 @@ def generate_answer(question: str, cleaned_contexts: list):
     )
 
 def log_to_db(question, rephrased_question, answer, contexts, latency_ms, usage):
-    """將問答資料和 token 使用量記錄到 SQLite 資料庫中"""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    DB_FILE = os.path.join(script_dir, "evaluation.db")
-    TABLE_NAME = "qa_logs"
+    """將問答資料和 token 使用量記錄到 PostgreSQL 資料庫中"""
     conn = None
+    cursor = None
     try:
-        conn = sqlite3.connect(DB_FILE)
+        # 從環境變數讀取 PostgreSQL 連線資訊
+        conn = psycopg2.connect(
+            host=os.getenv("DB_HOST", "localhost"),
+            port=os.getenv("DB_PORT", "5432"),
+            dbname=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD")
+        )
         cursor = conn.cursor()
         
-        contexts_json = json.dumps(contexts, ensure_ascii=False)
+        # 確保 retrieved_contexts 是合法的 JSON 字串
+        # psycopg2 會自動處理 Python dict 到 JSONB 的轉換
         
         # 從 usage 物件中安全地獲取 token 資訊
         prompt_tokens = usage.prompt_tokens if usage else None
         completion_tokens = usage.completion_tokens if usage else None
         total_tokens = usage.total_tokens if usage else None
 
+        TABLE_NAME = "qa_logs"
         insert_query = f"""INSERT INTO {TABLE_NAME} 
                          (question, rephrased_question, answer, retrieved_contexts, latency_ms, prompt_tokens, completion_tokens, total_tokens)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"""
+                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"""
         
-        cursor.execute(insert_query, (question, rephrased_question, answer, contexts_json, latency_ms, prompt_tokens, completion_tokens, total_tokens))
+        # 將 contexts python dict 直接傳遞，psycopg2 會將其序列化為 JSON
+        cursor.execute(insert_query, (question, rephrased_question, answer, json.dumps(contexts, ensure_ascii=False), latency_ms, prompt_tokens, completion_tokens, total_tokens))
         conn.commit()
-        print("\n[DB] 本次問答紀錄已成功儲存到資料庫。")
+        print("\n[DB] 本次問答紀錄已成功儲存到 PostgreSQL 資料庫。")
 
-    except sqlite3.Error as e:
-        print(f"\n[DB Error] 無法寫入資料庫: {e}")
+    except psycopg2.Error as e:
+        print(f"\n[DB Error] 無法寫入 PostgreSQL 資料庫: {e}")
     finally:
+        if cursor:
+            cursor.close()
         if conn:
             conn.close()
 
@@ -358,21 +369,3 @@ def chat_pipeline(question: str, history: list | None = None):
         
         # 使用專門為日誌準備的、未經過去重的完整上下文列表
         log_to_db(original_question, question, final_answer, contexts_for_logging, latency_ms, usage)
-    
-if __name__ == "__main__":
-    # 測試問題
-    # test_question = "有關新北市原住民的獎助學金申請期限是甚麼時候?"
-    
-    # 執行問答流程
-    # final_result = chat_pipeline(test_question)
-    
-    # 帶有歷史紀錄的測試
-    test_history = [
-        {"role": "user", "content": "我想了解原住民的獎學金"},
-        {"role": "assistant", "content": "好的，我們有幾種原住民獎學金，例如「新北市高級中等以上學校原住民學生獎學金」和「桃園市原住民族學生獎助」。您想了解哪一個？"}
-    ]
-    test_question_2 = "那新北市的申請期限是？"
-    final_result_with_history = chat_pipeline(test_question_2, history=test_history)
-
-    # 最終結果已在 pipeline 內部打印和記錄
-    print("\n--- Pipeline 執行完畢 ---")
