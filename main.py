@@ -1,6 +1,8 @@
 import os
 import sys
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Any
@@ -58,3 +60,7 @@ async def chat_endpoint(request: ChatRequest):
 
 # To run this API, save it as main.py and run the following command in your terminal:
 # uvicorn main:app --reload
+
+# --- Static Files ---
+# app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/", StaticFiles(directory=".", html=True), name="static")
