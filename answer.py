@@ -278,11 +278,12 @@ def chat_pipeline(question: str, history: list | None = None):
     start_time = time.time()
     result = {}
     usage = None
-    original_question = question # 保存原始問題以供日誌記錄
-    contexts_for_logging = [] # 用於儲存完整的、未經過去重的上下文，以便日誌記錄
+    original_question = question  # 保存原始問題以供日誌記錄
+    rephrased_question = question # 初始化，如果沒有歷史紀錄就是原問題
+    contexts_for_logging = []  # 用於儲存完整的、未經過去重的上下文，以便日誌記錄
 
     try:
-        # 如果有歷史紀錄，重構問題
+        # Step 1: 如果有歷史紀錄，重構問題
         if history:
             question = _rephrase_question_with_history(history, question)
         
@@ -290,16 +291,18 @@ def chat_pipeline(question: str, history: list | None = None):
 
         intent = intent_classification(question)
         print(f"意圖: {intent}")
-
+        
+        # Step 2: 根據意圖執行不同邏輯
         if intent == "scholarship":
             raw_contexts = retrieve_context(question)
             cleaned_contexts = log_and_clean_contexts(raw_contexts)
 
             if not cleaned_contexts:
-                result = {"answer": "抱歉，我沒有找到相關的補助或獎學金資訊。","contexts":[]}
-                contexts_for_logging = [] # 確保在返回前賦值
-                return result
-            
+                answer = "抱歉，我沒有找到與您問題相關的補助或獎學金資訊。"
+                result = {"answer": answer, "contexts": []}
+                contexts_for_logging = []
+            else:
+
             # Step 4: 獲取完整的 API 回應
             llm_response = generate_answer(question, cleaned_contexts)
             llm_output = llm_response.choices[0].message.content.strip()
@@ -342,11 +345,8 @@ def chat_pipeline(question: str, history: list | None = None):
                 for i, context in enumerate(result["contexts"], 1):
                     print(f"{i}. {context.get('source_file', 'N/A')}")
                 print("-------------------------")
-
-            return result
-
         else:
-            # 對於閒聊，同樣獲取完整回應
+            # 對於閒聊 (other intent)
             resp = openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -355,17 +355,31 @@ def chat_pipeline(question: str, history: list | None = None):
                 ],
                 temperature=0.7
             )
-            usage = resp.usage # 保存 usage 物件
+            usage = resp.usage  # 保存 usage 物件
             result = {"answer": resp.choices[0].message.content.strip(), "contexts": []}
-            contexts_for_logging = [] # 確保在返回前賦值
+            contexts_for_logging = []
             print(f"💡 LLM 回答: {result['answer']}")
-            return result
-    finally:
+
+        # Step 3: 成功後記錄到資料庫
         end_time = time.time()
         latency_ms = (end_time - start_time) * 1000
         print(f"\n⏱️ 本次問答總耗時: {latency_ms:.2f} ms")
+        log_to_db(original_question, question, result.get("answer", ""), contexts_for_logging, latency_ms, usage)
+
+        return result
+
+    except Exception as e:
+        import traceback
+        print(f"!!!!!! [ERROR] An exception occurred in chat_pipeline: {e} !!!!!!!")
+        print(traceback.format_exc()) # 打印完整的錯誤追蹤
+
+        # 準備要記錄到資料庫的錯誤資訊
+        error_answer = f"An error occurred: {str(e)}"
         
-        final_answer = result.get("answer", "")
-        
-        # 使用專門為日誌準備的、未經過去重的完整上下文列表
-        log_to_db(original_question, question, final_answer, contexts_for_logging, latency_ms, usage)
+        # 記錄錯誤到資料庫
+        end_time = time.time()
+        latency_ms = (end_time - start_time) * 1000
+        log_to_db(original_question, rephrased_question, error_answer, [], latency_ms, None)
+
+        # 回傳給前端一個統一的錯誤訊息
+        return {"answer": "抱歉，連線時發生錯誤，請稍後再試。", "contexts": []}
