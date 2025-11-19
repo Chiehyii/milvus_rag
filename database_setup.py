@@ -19,7 +19,7 @@ def create_table():
 
         conn = psycopg2.connect(db_url)
         cursor = conn.cursor()
-        
+
 
         TABLE_NAME = "qa_logs"
 
@@ -45,7 +45,9 @@ def create_table():
         print(f"✅ Table '{TABLE_NAME}' created successfully or already exists.")
 
     except psycopg2.Error as e:
-        print(f"❌ [DB Error] Could not create table: {e}")
+        print(f"❌ [DB Connection/Query Error] Could not create table: {e}")
+    except Exception as e:
+        print(f"❌ [Unexpected Error] An error occurred during database setup: {e}")
     finally:
         if cursor:
             cursor.close()
