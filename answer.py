@@ -302,49 +302,48 @@ def chat_pipeline(question: str, history: list | None = None):
                 result = {"answer": answer, "contexts": []}
                 contexts_for_logging = []
             else:
-
-            # Step 4: 獲取完整的 API 回應
-            llm_response = generate_answer(question, cleaned_contexts)
-            llm_output = llm_response.choices[0].message.content.strip()
-            usage = llm_response.usage # 保存 usage 物件
-
-            # Step 5: 解析 LLM 輸出
-            answer = llm_output
-            cited_source_names = []
-            if "|||SOURCES|||" in llm_output:
-                parts = llm_output.split("|||SOURCES|||")
-                answer = parts[0].strip()
-                source_names_str = parts[1].strip()
-                if source_names_str:
-                    cited_source_names = [name.strip() for name in source_names_str.split(',')]
-
-            # Step 6: 過濾出完整的引用上下文，用於日誌記錄
-            cited_source_names_set = set(cited_source_names)
-            all_cited_contexts = []
-            for context in cleaned_contexts:
-                if context.get('source_file') in cited_source_names_set:
-                    all_cited_contexts.append(context)
-            
-            contexts_for_logging = all_cited_contexts # 將完整列表賦值給日誌專用變數
-
-            # Step 7: 建立一個去重的版本，用於前端顯示
-            unique_display_contexts = []
-            seen_keys = set()
-            for context in all_cited_contexts:
-                # 優先使用 URL 作為唯一標識，若無則使用檔名
-                unique_key = context.get('source_url') or context.get('source_file')
-                if unique_key not in seen_keys:
-                    unique_display_contexts.append(context)
-                    seen_keys.add(unique_key)
-            
-            result = {"answer": answer, "contexts": unique_display_contexts} # 回傳給前端的是去重後的版本
-
-            print(f"💡 LLM 回答: {result['answer']}")
-            if result["contexts"]:
-                print("\n--- LLM 實際參考來源 ---")
-                for i, context in enumerate(result["contexts"], 1):
-                    print(f"{i}. {context.get('source_file', 'N/A')}")
-                print("-------------------------")
+                # Step 4: 獲取完整的 API 回應
+                llm_response = generate_answer(question, cleaned_contexts)
+                llm_output = llm_response.choices[0].message.content.strip()
+                usage = llm_response.usage # 保存 usage 物件
+    
+                # Step 5: 解析 LLM 輸出
+                answer = llm_output
+                cited_source_names = []
+                if "|||SOURCES|||" in llm_output:
+                    parts = llm_output.split("|||SOURCES|||")
+                    answer = parts[0].strip()
+                    source_names_str = parts[1].strip()
+                    if source_names_str:
+                        cited_source_names = [name.strip() for name in source_names_str.split(',')]
+    
+                # Step 6: 過濾出完整的引用上下文，用於日誌記錄
+                cited_source_names_set = set(cited_source_names)
+                all_cited_contexts = []
+                for context in cleaned_contexts:
+                    if context.get('source_file') in cited_source_names_set:
+                        all_cited_contexts.append(context)
+                
+                contexts_for_logging = all_cited_contexts # 將完整列表賦值給日誌專用變數
+    
+                # Step 7: 建立一個去重的版本，用於前端顯示
+                unique_display_contexts = []
+                seen_keys = set()
+                for context in all_cited_contexts:
+                    # 優先使用 URL 作為唯一標識，若無則使用檔名
+                    unique_key = context.get('source_url') or context.get('source_file')
+                    if unique_key not in seen_keys:
+                        unique_display_contexts.append(context)
+                        seen_keys.add(unique_key)
+                
+                result = {"answer": answer, "contexts": unique_display_contexts} # 回傳給前端的是去重後的版本
+    
+                print(f"💡 LLM 回答: {result['answer']}")
+                if result["contexts"]:
+                    print("\n--- LLM 實際參考來源 ---")
+                    for i, context in enumerate(result["contexts"], 1):
+                        print(f"{i}. {context.get('source_file', 'N/A')}")
+                    print("-------------------------")
         else:
             # 對於閒聊 (other intent)
             resp = openai_client.chat.completions.create(
