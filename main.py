@@ -50,16 +50,25 @@ async def chat_endpoint(request: ChatRequest):
     Receives a user query and conversation history, processes it through the RAG pipeline,
     and returns the generated answer along with the retrieved contexts.
     """
-    # Call the chat pipeline function with the query and history
-    result = chat_pipeline(request.query, request.history or [])
-    
-    # The result from chat_pipeline is already a dictionary like:
-    # {"answer": "...", "contexts": [...]}
-    # FastAPI will automatically convert it to the ChatResponse model.
-    return result
-
-# To run this API, save it as main.py and run the following command in your terminal:
-# uvicorn main:app --reload
+    import logging
+    print("--- [INFO] Received new chat request ---")
+    try:
+        print(f"--- [INFO] Processing query: '{request.query}' ---")
+        # Call the chat pipeline function with the query and history
+        result = chat_pipeline(request.query, request.history or [])
+        
+        print("--- [INFO] Successfully processed request and got result from chat_pipeline ---")
+        # The result from chat_pipeline is already a dictionary like:
+        # {"answer": "...", "contexts": [...]}
+        # FastAPI will automatically convert it to the ChatResponse model.
+        return result
+    except Exception as e:
+        print(f"!!!!!! [ERROR] An exception occurred in chat_endpoint: {e} !!!!!!!")
+        logging.error("Exception in /chat endpoint", exc_info=True)
+        # When debugging on Render, it's often better to see the server crash with a full traceback.
+        # FastAPI's default behavior on an unhandled exception is to log it and return a 500 error.
+        # Re-raising ensures the error is not silently handled and is visible in Render's logs.
+        raise
 
 # --- Static Files ---
 # app.mount("/", StaticFiles(directory="static", html=True), name="static")
