@@ -12,14 +12,14 @@ def create_table():
     cursor = None
     try:
         # Connect to the database using environment variables
-        conn = psycopg2.connect(
-            host=os.getenv("DB_HOST"),
-            port=os.getenv("DB_PORT", "5432"),
-            dbname=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD")
-        )
+        db_url = os.getenv("DATABASE_URL")
+        if not db_url:
+            raise ValueError("❌ DATABASE_URL environment variable not set.")
         cursor = conn.cursor()
+
+        conn = psycopg2.connect(db_url)
+        cursor = conn.cursor()
+        
 
         TABLE_NAME = "qa_logs"
 
