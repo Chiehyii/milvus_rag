@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Define the table name as a constant
+TABLE_NAME = "qa_logs"
+
 def create_database_and_table():
     """
     Connects to the PostgreSQL database and creates the qa_logs table
