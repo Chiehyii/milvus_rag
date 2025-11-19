@@ -1,60 +1,68 @@
-
 import os
 import psycopg2
+from psycopg2 import sql
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
-def create_table():
-    """Connects to the PostgreSQL database and creates the qa_logs table if it doesn't exist."""
-    conn = None
-    cursor = None
+def create_database_and_table():
+    """
+    Connects to the PostgreSQL database and creates the qa_logs table
+    if it hasn't been created yet.
+    """
     try:
-        # Connect to the database using environment variables
-        db_url = os.getenv("DATABASE_URL")
-        if not db_url:
-            raise ValueError("❌ DATABASE_URL environment variable not set.")
-        cursor = conn.cursor()
+        # 1. 在函式內部讀取環境變數
+        conn_params = {
+            'host': os.getenv("DB_HOST"),
+            'port': os.getenv("DB_PORT", "5432"), # 提供預設 port
+            'dbname': os.getenv("DB_NAME"),
+            'user': os.getenv("DB_USER"),
+            'password': os.getenv("DB_PASSWORD")
+        }
+        
+        # 檢查是否有遺漏的參數
+        for key, value in conn_params.items():
+            if not value:
+                raise ValueError(f"Missing database connection parameter: {key}")
 
-        conn = psycopg2.connect(db_url)
-        cursor = conn.cursor()
+        print(f"嘗試連線到資料庫: {conn_params['host']}/{conn_params['dbname']}")
 
+        # 2. 使用 'with' 語句自動管理連線和遊標
+        with psycopg2.connect(**conn_params) as conn:
+            with conn.cursor() as cursor:
+                create_table_query = sql.SQL("""
+                CREATE TABLE IF NOT EXISTS {table} (
+                    id SERIAL PRIMARY KEY,
+                    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    question TEXT NOT NULL,
+                    rephrased_question TEXT,
+                    answer TEXT,
+                    retrieved_contexts JSONB,
+                    faithfulness_score REAL,
+                    response_relevancy_score REAL,
+                    context_precision_score REAL,
+                    latency_ms REAL,
+                    prompt_tokens INTEGER,
+                    completion_tokens INTEGER,
+                    total_tokens INTEGER
+                );
+                """).format(table=sql.Identifier(TABLE_NAME))
 
-        TABLE_NAME = "qa_logs"
+                cursor.execute(create_table_query)
+                # conn.commit() 在 with conn 區塊結束時自動調用
+                print(f"✅ Database '{conn_params['dbname']}' and table '{TABLE_NAME}' are set up successfully in PostgreSQL.")
 
-        # SQL statement to create the table
-        # Using "IF NOT EXISTS" makes the script safe to run multiple times.
-        create_table_query = f"""
-        CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-            id SERIAL PRIMARY KEY,
-            question TEXT,
-            rephrased_question TEXT,
-            answer TEXT,
-            retrieved_contexts JSONB,
-            latency_ms REAL,
-            prompt_tokens INTEGER,
-            completion_tokens INTEGER,
-            total_tokens INTEGER,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-        """
-
-        cursor.execute(create_table_query)
-        conn.commit()
-        print(f"✅ Table '{TABLE_NAME}' created successfully or already exists.")
-
+    except ValueError as ve:
+        # 專門捕獲我們自己拋出的環境變數錯誤
+        print(f"❌ Configuration Error: {ve}")
     except psycopg2.Error as e:
-        print(f"❌ [DB Connection/Query Error] Could not create table: {e}")
+        # 捕獲所有資料庫相關錯誤
+        print(f"❌ Database error: {e}")
     except Exception as e:
-        print(f"❌ [Unexpected Error] An error occurred during database setup: {e}")
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
+        # 捕獲其他所有意外錯誤
+        print(f"❌ An unexpected error occurred: {e}")
 
+# 確保腳本可以獨立運行
 if __name__ == "__main__":
-    print("🚀 Running database setup script...")
-    create_table()
-    print("🏁 Database setup script finished.")
+    create_database_and_table()

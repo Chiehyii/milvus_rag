@@ -170,11 +170,13 @@ def log_to_db(question, rephrased_question, answer, contexts, latency_ms, usage)
     cursor = None
     try:
         # 從環境變數讀取 PostgreSQL 連線資訊
-        db_url = os.getenv("DATABASE_URL")
-        if not db_url:
-            raise ValueError("\n[DB Error]❌ DATABASE_URL environment variable not set.")
-        
-        conn = psycopg2.connect(db_url)
+        conn = psycopg2.connect(
+            host=os.getenv("DB_HOST"),
+            port=os.getenv("DB_PORT"),
+            dbname=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD")
+        )
         cursor = conn.cursor()
         
         # 確保 retrieved_contexts 是合法的 JSON 字串
