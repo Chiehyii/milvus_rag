@@ -1,11 +1,15 @@
 import os
+import sys
 import psycopg2
 import time
 import json
+import traceback
 from dotenv import load_dotenv
+# sys.path.append(r'C:\AIChatbot\rag_PoC\advanced-rag')
 
 from openai import OpenAI
 from pymilvus import MilvusClient
+# from auto_filter import extract_filters_from_question, filters_to_expr
 from intent_classification import intent_classification
 
 # Load environment variables from .env file
@@ -169,14 +173,19 @@ def log_to_db(question, rephrased_question, answer, contexts, latency_ms, usage)
     conn = None
     cursor = None
     try:
-        # 從環境變數讀取 PostgreSQL 連線資訊
+        # # 從環境變數讀取 PostgreSQL 連線資訊
         conn = psycopg2.connect(
-            host=os.getenv("DB_HOST"),
-            port=os.getenv("DB_PORT"),
+            host=os.getenv("DB_HOST", "localhost"),
+            port=os.getenv("DB_PORT", "5432"),
             dbname=os.getenv("DB_NAME"),
             user=os.getenv("DB_USER"),
             password=os.getenv("DB_PASSWORD")
         )
+        # db_url = os.getenv("DATABASE_URL")
+        # if not db_url:
+        #     raise ValueError("\n[DB Error]❌ DATABASE_ environment variable not set.")
+        
+        # conn = psycopg2.connect(db_url)
         cursor = conn.cursor()
         
         # 確保 retrieved_contexts 是合法的 JSON 字串
@@ -187,18 +196,24 @@ def log_to_db(question, rephrased_question, answer, contexts, latency_ms, usage)
         completion_tokens = usage.completion_tokens if usage else None
         total_tokens = usage.total_tokens if usage else None
 
-        TABLE_NAME = "qa_logs"
+        TABLE_NAME = "qa_logs2"
         insert_query = f"""INSERT INTO {TABLE_NAME} 
                          (question, rephrased_question, answer, retrieved_contexts, latency_ms, prompt_tokens, completion_tokens, total_tokens)
-                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"""
+                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id;"""
         
         # 將 contexts python dict 直接傳遞，psycopg2 會將其序列化為 JSON
         cursor.execute(insert_query, (question, rephrased_question, answer, json.dumps(contexts, ensure_ascii=False), latency_ms, prompt_tokens, completion_tokens, total_tokens))
+        
+        # 獲取返回的 id
+        log_id = cursor.fetchone()[0]
+        
         conn.commit()
-        print("\n[DB] 本次問答紀錄已成功儲存到 PostgreSQL 資料庫。")
+        print(f"\n[DB] 本次問答紀錄已成功儲存到 PostgreSQL 資料庫，ID: {log_id}。")
+        return log_id
 
     except psycopg2.Error as e:
         print(f"\n[DB Error] 無法寫入 PostgreSQL 資料庫: {e}")
+        return None
     finally:
         if cursor:
             cursor.close()
@@ -278,12 +293,11 @@ def chat_pipeline(question: str, history: list | None = None):
     start_time = time.time()
     result = {}
     usage = None
-    original_question = question  # 保存原始問題以供日誌記錄
-    rephrased_question = question # 初始化，如果沒有歷史紀錄就是原問題
-    contexts_for_logging = []  # 用於儲存完整的、未經過去重的上下文，以便日誌記錄
+    original_question = question # 保存原始問題以供日誌記錄
+    contexts_for_logging = [] # 用於儲存完整的、未經過去重的上下文，以便日誌記錄
 
     try:
-        # Step 1: 如果有歷史紀錄，重構問題
+        # 如果有歷史紀錄，重構問題
         if history:
             question = _rephrase_question_with_history(history, question)
         
@@ -291,61 +305,64 @@ def chat_pipeline(question: str, history: list | None = None):
 
         intent = intent_classification(question)
         print(f"意圖: {intent}")
-        
-        # Step 2: 根據意圖執行不同邏輯
+
         if intent == "scholarship":
             raw_contexts = retrieve_context(question)
             cleaned_contexts = log_and_clean_contexts(raw_contexts)
 
             if not cleaned_contexts:
-                answer = "抱歉，我沒有找到與您問題相關的補助或獎學金資訊。"
-                result = {"answer": answer, "contexts": []}
-                contexts_for_logging = []
-            else:
-                # Step 4: 獲取完整的 API 回應
-                llm_response = generate_answer(question, cleaned_contexts)
-                llm_output = llm_response.choices[0].message.content.strip()
-                usage = llm_response.usage # 保存 usage 物件
-    
-                # Step 5: 解析 LLM 輸出
-                answer = llm_output
-                cited_source_names = []
-                if "|||SOURCES|||" in llm_output:
-                    parts = llm_output.split("|||SOURCES|||")
-                    answer = parts[0].strip()
-                    source_names_str = parts[1].strip()
-                    if source_names_str:
-                        cited_source_names = [name.strip() for name in source_names_str.split(',')]
-    
-                # Step 6: 過濾出完整的引用上下文，用於日誌記錄
-                cited_source_names_set = set(cited_source_names)
-                all_cited_contexts = []
-                for context in cleaned_contexts:
-                    if context.get('source_file') in cited_source_names_set:
-                        all_cited_contexts.append(context)
-                
-                contexts_for_logging = all_cited_contexts # 將完整列表賦值給日誌專用變數
-    
-                # Step 7: 建立一個去重的版本，用於前端顯示
-                unique_display_contexts = []
-                seen_keys = set()
-                for context in all_cited_contexts:
-                    # 優先使用 URL 作為唯一標識，若無則使用檔名
-                    unique_key = context.get('source_url') or context.get('source_file')
-                    if unique_key not in seen_keys:
-                        unique_display_contexts.append(context)
-                        seen_keys.add(unique_key)
-                
-                result = {"answer": answer, "contexts": unique_display_contexts} # 回傳給前端的是去重後的版本
-    
-                print(f"💡 LLM 回答: {result['answer']}")
-                if result["contexts"]:
-                    print("\n--- LLM 實際參考來源 ---")
-                    for i, context in enumerate(result["contexts"], 1):
-                        print(f"{i}. {context.get('source_file', 'N/A')}")
-                    print("-------------------------")
+                result = {"answer": "抱歉，我沒有找到相關的補助或獎學金資訊。","contexts":[]}
+                contexts_for_logging = [] # 確保在返回前賦值
+                return result
+            
+            # Step 4: 獲取完整的 API 回應
+            llm_response = generate_answer(question, cleaned_contexts)
+            llm_output = llm_response.choices[0].message.content.strip()
+            usage = llm_response.usage # 保存 usage 物件
+
+            # Step 5: 解析 LLM 輸出
+            answer = llm_output
+            cited_source_names = []
+            if "|||SOURCES|||" in llm_output:
+                parts = llm_output.split("|||SOURCES|||")
+                answer = parts[0].strip()
+                source_names_str = parts[1].strip()
+                if source_names_str:
+                    cited_source_names = [name.strip() for name in source_names_str.split(',')]
+
+            # Step 6: 過濾出完整的引用上下文，用於日誌記錄
+            cited_source_names_set = set(cited_source_names)
+            all_cited_contexts = []
+            for context in cleaned_contexts:
+                if context.get('source_file') in cited_source_names_set:
+                    all_cited_contexts.append(context)
+            
+            contexts_for_logging = all_cited_contexts # 將完整列表賦值給日誌專用變數
+
+            # Step 7: 建立一個去重的版本，用於前端顯示
+            unique_display_contexts = []
+            seen_keys = set()
+            for context in all_cited_contexts:
+                # 優先使用 URL 作為唯一標識，若無則使用檔名
+                unique_key = context.get('source_url') or context.get('source_file')
+                if unique_key not in seen_keys:
+                    unique_display_contexts.append(context)
+                    seen_keys.add(unique_key)
+            
+            result = {"answer": answer, "contexts": unique_display_contexts} # 回傳給前端的是去重後的版本
+
+            print(f"💡 LLM 回答: {result['answer']}")
+            if result["contexts"]:
+                print("\n--- LLM 實際參考來源 ---")
+                for i, context in enumerate(result["contexts"], 1):
+                    print(f"{i}. {context.get('source_file', 'N/A')}")
+                print("-------------------------")
+
+            # Do not return here, let it fall through to the finally block
+            # return result
+
         else:
-            # 對於閒聊 (other intent)
+            # 對於閒聊，同樣獲取完整回應
             resp = openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -354,31 +371,42 @@ def chat_pipeline(question: str, history: list | None = None):
                 ],
                 temperature=0.7
             )
-            usage = resp.usage  # 保存 usage 物件
+            usage = resp.usage # 保存 usage 物件
             result = {"answer": resp.choices[0].message.content.strip(), "contexts": []}
-            contexts_for_logging = []
+            contexts_for_logging = [] # 確保在返回前賦值
             print(f"💡 LLM 回答: {result['answer']}")
-
-        # Step 3: 成功後記錄到資料庫
+            # Do not return here, let it fall through to the finally block
+            # return result
+    finally:
         end_time = time.time()
         latency_ms = (end_time - start_time) * 1000
         print(f"\n⏱️ 本次問答總耗時: {latency_ms:.2f} ms")
-        log_to_db(original_question, question, result.get("answer", ""), contexts_for_logging, latency_ms, usage)
-
-        return result
-
-    except Exception as e:
-        import traceback
-        print(f"!!!!!! [ERROR] An exception occurred in chat_pipeline: {e} !!!!!!!")
-        print(traceback.format_exc()) # 打印完整的錯誤追蹤
-
-        # 準備要記錄到資料庫的錯誤資訊
-        error_answer = f"An error occurred: {str(e)}"
         
-        # 記錄錯誤到資料庫
-        end_time = time.time()
-        latency_ms = (end_time - start_time) * 1000
-        log_to_db(original_question, rephrased_question, error_answer, [], latency_ms, None)
+        final_answer = result.get("answer", "")
+        
+        # 使用專門為日誌準備的、未經過去重的完整上下文列表
+        log_id = log_to_db(original_question, question, final_answer, contexts_for_logging, latency_ms, usage)
+        
+        # 將 log_id 添加到要返回的結果中
+        if log_id:
+            result["log_id"] = log_id
+            
+        return result
+    
+if __name__ == "__main__":
+    # 測試問題
+    # test_question = "有關新北市原住民的獎助學金申請期限是甚麼時候?"
+    
+    # 執行問答流程
+    # final_result = chat_pipeline(test_question)
+    
+    # 帶有歷史紀錄的測試
+    test_history = [
+        {"role": "user", "content": "我想了解原住民的獎學金"},
+        {"role": "assistant", "content": "好的，我們有幾種原住民獎學金，例如「新北市高級中等以上學校原住民學生獎學金」和「桃園市原住民族學生獎助」。您想了解哪一個？"}
+    ]
+    test_question_2 = "那新北市的申請期限是？"
+    final_result_with_history = chat_pipeline(test_question_2, history=test_history)
 
-        # 回傳給前端一個統一的錯誤訊息
-        return {"answer": "抱歉，連線時發生錯誤，請稍後再試。", "contexts": []}
+    # 最終結果已在 pipeline 內部打印和記錄
+    print("\n--- Pipeline 執行完畢 ---")

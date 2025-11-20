@@ -6,6 +6,7 @@
     <title>獎助學金問答</title>
     <link rel="icon" href="/school_logo.ico" type="image/x-icon">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://kit.fontawesome.com/b18ca6c4c0.js" crossorigin="anonymous"></script>
     <style>
         :root {
             --body-bg: #f5f5f5;
@@ -99,9 +100,15 @@
         }
         .bot-message-container {
             display: flex;
+            flex-direction: column;
             align-items: flex-start;
             align-self: flex-start;
             max-width: 85%;
+            margin-bottom: 10px;
+        }
+        .bot-message-content {
+            display: flex;
+            align-items: flex-start;
         }
         .avatar {
             width: 50px;
@@ -114,6 +121,7 @@
             background-color: var(--bot-msg-bg);
             border-top-left-radius: 4px;
             flex-grow: 1;
+            margin-bottom: 0; /* Now handled by container */
         }
         .bot-message .thinking {
             font-style: italic;
@@ -252,6 +260,60 @@
         .example-question:hover {
             background-color: #f5f5f5;
         }
+
+        /* Feedback Buttons */
+        .feedback-buttons {
+            text-align: left;
+            margin-top: 8px;
+            margin-left: 60px; /* Avatar width (50px) + margin (10px) */
+        }
+
+        .feedback-btn {
+            background: none;
+            border: 1px solid transparent;
+            border-radius: 15px;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+            padding: 0px 4px 0px 4px;
+        }
+
+        .feedback-btn:hover {
+            background-color: var(--bot-msg-bg);
+        }
+
+        .feedback-btn.selected .fa-regular {
+            color: #555 !important;
+        }
+
+        /* Feedback Modal */
+        #feedback-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 500px;
+            background: var(--chat-bg);
+            border-radius: 8px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            z-index: 1001; /* Above chat popup */
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        #feedback-modal h3 { margin-top: 0; }
+        #feedback-textarea {
+            width: 95%;
+            height: 100px;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            resize: vertical;
+            font-family: var(--font-family);
+        }
     </style>
 </head>
 <body>
@@ -285,6 +347,18 @@
     </div>
 </div>
 
+<div id="feedback-modal">
+    <h3>提供您的寶貴意見</h3>
+    <p>請告訴我們這個回答哪裡不符合您的預期，您的回饋是我們進步的動力！</p>
+    <form id="feedback-form">
+        <textarea id="feedback-textarea" placeholder="例如：答案不正確、資訊不完整、與問題無關..." required></textarea>
+        <div style="text-align: right;">
+            <button type="button" id="close-feedback-btn">取消</button>
+            <button type="submit">送出</button>
+        </div>
+    </form>
+</div>
+
 <button id="open-chat-btn">詢問獎助學金</button>
 
 <script>
@@ -298,6 +372,11 @@
     const chatPopup = document.getElementById('chat-popup');
     const backdrop = document.getElementById('backdrop');
     const pageContent = document.getElementById('page-content');
+    const feedbackModal = document.getElementById('feedback-modal');
+    const feedbackForm = document.getElementById('feedback-form');
+    const closeFeedbackBtn = document.getElementById('close-feedback-btn');
+    const feedbackTextarea = document.getElementById('feedback-textarea');
+    let currentFeedbackContext = {};
 
     const initialBotMessage = '你好！我是慈濟大學獎助學金問答助理，請問有什麼可以幫助您的嗎？';
     let chatHistory = [];
@@ -311,6 +390,8 @@
     });
     openChatBtn.addEventListener('click', openChat);
     backdrop.addEventListener('click', closeChat);
+    feedbackForm.addEventListener('submit', handleFeedbackSubmit);
+    closeFeedbackBtn.addEventListener('click', closeFeedbackModal);
 
     // --- Initial State ---
     sendButton.disabled = true;
@@ -328,6 +409,50 @@
         chatPopup.style.display = 'none';
         backdrop.style.display = 'none';
         pageContent.classList.remove('blurred');
+    }
+
+    // --- Feedback Modal Functions ---
+    function openFeedbackModal(messageId, query, answer) {
+        currentFeedbackContext = { messageId, query, answer };
+        feedbackModal.style.display = 'block';
+        feedbackTextarea.value = '';
+        feedbackTextarea.focus();
+    }
+
+    function closeFeedbackModal() {
+        feedbackModal.style.display = 'none';
+    }
+
+    async function handleFeedbackSubmit(e) {
+        e.preventDefault();
+        const feedbackText = feedbackTextarea.value.trim();
+        if (!feedbackText) return;
+
+        const feedbackData = {
+            ...currentFeedbackContext,
+            feedback_type: 'dislike',
+            feedback_text: feedbackText,
+            timestamp: new Date().toISOString()
+        };
+
+        // TODO: 將 feedbackData 發送到您的後端 API
+        console.log('Submitting feedback to database:', feedbackData);
+        /*
+        try {
+            const response = await fetch('/api/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(feedbackData)
+            });
+            if (!response.ok) throw new Error('Failed to submit feedback');
+            alert('感謝您的回饋！');
+        } catch (error) {
+            console.error('Feedback submission error:', error);
+            alert('抱歉，提交回饋時發生錯誤。');
+        }
+        */
+        alert('感謝您的回饋！'); // 暫時用 alert 提示
+        closeFeedbackModal();
     }
 
     // --- Event Handlers ---
@@ -350,7 +475,7 @@
         addMessage('<span class="thinking">思考中...</span>', 'bot', thinkingMessageId);
 
         try {
-            const response = await fetch('http://127.0.0.1:8000/chat', {
+            const response = await fetch('/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -362,7 +487,7 @@
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
             const data = await response.json();
-            updateBotMessage(thinkingMessageId, data.answer, data.contexts);
+            updateBotMessage(thinkingMessageId, data.answer, data.contexts, data.log_id);
             chatHistory.push({ role: 'assistant', content: data.answer });
 
         } catch (error) {
@@ -420,6 +545,9 @@
             messageWrapper.classList.add('bot-message-container');
             if (id) messageWrapper.id = id;
 
+            const contentWrapper = document.createElement('div');
+            contentWrapper.className = 'bot-message-content';
+
             const avatar = document.createElement('img');
             avatar.src = 'school_logo.png';
             avatar.alt = 'School Logo';
@@ -429,15 +557,16 @@
             messageBubble.classList.add('message', 'bot-message');
             messageBubble.innerHTML = text; 
 
-            messageWrapper.appendChild(avatar);
-            messageWrapper.appendChild(messageBubble);
+            contentWrapper.appendChild(avatar);
+            contentWrapper.appendChild(messageBubble);
+            messageWrapper.appendChild(contentWrapper);
         }
 
         msgWindow.appendChild(messageWrapper);
         msgWindow.scrollTop = msgWindow.scrollHeight;
     }
 
-    function updateBotMessage(id, answer, contexts = []) {
+    function updateBotMessage(id, answer, contexts = [], log_id = null) {
         const messageContainer = document.getElementById(id);
         if (!messageContainer) return;
 
@@ -445,6 +574,8 @@
         if (!messageEl) return;
 
         let content = marked.parse(answer);
+
+        const isErrorOrThinking = answer.includes('<span class="thinking">') || answer.startsWith('抱歉');
 
         if (contexts && contexts.length > 0) {
             content += '<div class="contexts"><h4>參考資料：</h4>';
@@ -457,7 +588,104 @@
         }
         
         messageEl.innerHTML = content;
+
+        if (!isErrorOrThinking && log_id) {
+            const feedbackDiv = document.createElement('div');
+            feedbackDiv.className = 'feedback-buttons';
+            feedbackDiv.dataset.logId = log_id;
+            feedbackDiv.innerHTML = `
+                <button class="feedback-btn like-btn" title="滿意"><i class="fa-regular fa-thumbs-up fa-lg" style="color: #adb1b9;"></i></button>
+                <button class="feedback-btn dislike-btn" title="不滿意"><i class="fa-regular fa-thumbs-down fa-lg" style="color: #adb1b9;"></i></button>
+            `;
+            messageContainer.appendChild(feedbackDiv);
+            feedbackDiv.addEventListener('click', handleFeedbackClick);
+        }
+        
         msgWindow.scrollTop = msgWindow.scrollHeight;
+    }
+
+    async function handleFeedbackClick(e) {
+        const target = e.target.closest('.feedback-btn');
+        if (!target) return;
+
+        const container = target.parentElement;
+        const logId = container.dataset.logId;
+        if (!logId) return;
+
+        const likeBtn = container.querySelector('.like-btn');
+        const dislikeBtn = container.querySelector('.dislike-btn');
+        
+        const isDislike = target.classList.contains('dislike-btn');
+        const isSelected = target.classList.contains('selected');
+
+        // If the clicked button is already selected, unselect it and clear feedback
+        if (isSelected) {
+            target.classList.remove('selected');
+            await sendFeedback(logId, null, null); // Clear both type and text
+        } else {
+            // Unselect the other button if it's selected
+            if (isDislike) {
+                likeBtn.classList.remove('selected');
+            } else {
+                dislikeBtn.classList.remove('selected');
+            }
+            
+            // Select the clicked one
+            target.classList.add('selected');
+
+            // If dislike is chosen, save it immediately then open modal
+            if (isDislike) {
+                await sendFeedback(logId, 'dislike');
+                openFeedbackModal(logId);
+            } else {
+                await sendFeedback(logId, 'like');
+            }
+        }
+    }
+
+    function openFeedbackModal(logId) {
+        currentFeedbackContext = { logId };
+        feedbackModal.style.display = 'block';
+        feedbackTextarea.value = '';
+        feedbackTextarea.focus();
+    }
+
+    function closeFeedbackModal() {
+        feedbackModal.style.display = 'none';
+    }
+
+    async function handleFeedbackSubmit(e) {
+        e.preventDefault();
+        const feedbackText = feedbackTextarea.value.trim();
+        const { logId } = currentFeedbackContext;
+
+        if (!logId) return;
+
+        // Even if the text is empty, we proceed to log the 'dislike'
+        await sendFeedback(logId, 'dislike', feedbackText);
+        
+        closeFeedbackModal();
+    }
+
+    async function sendFeedback(logId, feedbackType, feedbackText = null) {
+        console.log('Sending feedback:', { log_id: logId, feedback_type: feedbackType, feedback_text: feedbackText });
+        try {
+            const response = await fetch('/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    log_id: parseInt(logId),
+                    feedback_type: feedbackType,
+                    feedback_text: feedbackText
+                })
+            });
+            if (!response.ok) throw new Error('Failed to submit feedback');
+            console.log('Feedback submitted successfully.');
+        } catch (error) {
+            console.error('Feedback submission error:', error);
+            // Optionally inform the user
+            // alert('抱歉，提交回饋時發生錯誤。');
+        }
     }
 </script>
 
