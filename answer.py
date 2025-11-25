@@ -3,13 +3,11 @@ import sys
 import psycopg2
 import time
 import json
-import traceback
 from dotenv import load_dotenv
-# sys.path.append(r'C:\AIChatbot\rag_PoC\advanced-rag')
 
-from openai import OpenAI
-from pymilvus import MilvusClient
-# from auto_filter import extract_filters_from_question, filters_to_expr
+from openai import AsyncOpenAI
+from pymilvus import MilvusClient 
+from auto_filter import extract_filters_from_question, filters_to_expr
 from intent_classification import intent_classification
 
 # Load environment variables from .env file
@@ -17,7 +15,7 @@ load_dotenv()
 
 zilliz_api_key = os.getenv("ZILLIZ_API_KEY")
 api_key = os.getenv("OPENAI_API_KEY")
-openai_client = OpenAI(api_key=api_key)
+openai_client = AsyncOpenAI(api_key=api_key)
 CLUSTER_ENDPOINT="https://in03-a6f08ce2ff778ed.serverless.gcp-us-west1.cloud.zilliz.com:443"
 milvus_client = MilvusClient(
                     uri=CLUSTER_ENDPOINT,
@@ -25,23 +23,23 @@ milvus_client = MilvusClient(
                     )
 collection_name = "rag5_scholarships_hybrid"
 
-def get_embedding(text):
+async def get_embedding(text):
     """產生文字向量"""
-    resp = openai_client.embeddings.create(
+    resp = await openai_client.embeddings.create(
         input=text,
         model="text-embedding-3-small"
     )
     return resp.data[0].embedding
 
-def retrieve_context(question: str, top_k: int=7):
+async def retrieve_context(question: str, top_k: int=7):
     """根據問題進行相似度檢索+過濾"""
     # 1. 產生問題的向量
-    question_embedding = get_embedding(question)
+    question_embedding = await get_embedding(question)
 
     # 2. 重問題中提取 metadata 過濾條件
-    # filters = extract_filters_from_question(question)
-    # expr = filters_to_expr(filters) if filters else None
-    # print("Milvus expr:", expr)
+    filters = extract_filters_from_question(question)
+    expr = filters_to_expr(filters) if filters else None
+    print("Milvus expr:", expr)
 
     # 3. 執行向量檢索
     search_params = {
@@ -49,12 +47,15 @@ def retrieve_context(question: str, top_k: int=7):
         "params": {"nprobe": 10} # 確保這裡沒有 "expr"
     }
 
+    # Note: milvus_client.search is synchronous. In a high-concurrency production app,
+    # this should be run in a thread pool, e.g., with asyncio.to_thread.
+    # For this case, we'll keep it as is, as the primary bottleneck was the OpenAI calls.
     results = milvus_client.search(
         collection_name=collection_name,
         data=[question_embedding],
         search_params=search_params,
         limit=top_k,
-        # filter=expr if expr else None,
+        filter=expr if expr else None,
         output_fields=["id", "text", "source_file", "source_url", "status", "subsidy_type", "edu_system"],
     )
     if not results or not results[0]:
@@ -220,7 +221,7 @@ def log_to_db(question, rephrased_question, answer, contexts, latency_ms, usage)
         if conn:
             conn.close()
 
-def _rephrase_question_with_history(history: list, question: str) -> str:
+async def _rephrase_question_with_history(history: list, question: str) -> str:
     """
     使用對話歷史來重構一個新的、獨立的問題。
     """
@@ -232,45 +233,45 @@ def _rephrase_question_with_history(history: list, question: str) -> str:
     history_str = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history[-8:]])
 
     system_prompt = """你是一個對話助理，你的任務是根據提供的「對話歷史」和「最新的使用者問題」，生成一個獨立、完整的「重構後的問題」。
-這個「重構後的問題」必須能夠在沒有任何上下文的情況下被完全理解。
+    這個「重構後的問題」必須能夠在沒有任何上下文的情況下被完全理解。
 
-**規則:**
-- 如果「最新的使用者問題」**不是一個問題** (例如：道謝 "謝謝", 肯定 "我知道了", 問候 "你好"), **請直接原樣返回「最新的使用者問題」**，不要做任何改寫。
-- 如果「最新的使用者問題」已經是一個完整的、可獨立理解的問題，直接返回原問題。
-- 否則，請結合「對話歷史」來改寫問題，使其變得完整。
-- 保持問題簡潔。
+    **規則:**
+    - 如果「最新的使用者問題」**不是一個問題** (例如：道謝 "謝謝", 肯定 "我知道了", 問候 "你好"), **請直接原樣返回「最新的使用者問題」**，不要做任何改寫。
+    - 如果「最新的使用者問題」已經是一個完整的、可獨立理解的問題，直接返回原問題。
+    - 否則，請結合「對話歷史」來改寫問題，使其變得完整。
+    - 保持問題簡潔。
 
-例如 (需要改寫):
-對話歷史:
-user: 我想找清寒獎學金
-assistant: 我們有幾種清寒獎學金，例如 A 和 B。
-最新的使用者問題:
-它需要什麼資格?
+    例如 (需要改寫):
+    對話歷史:
+    user: 我想找清寒獎學金
+    assistant: 我們有幾種清寒獎學金，例如 A 和 B。
+    最新的使用者問題:
+    它需要什麼資格?
 
-重構後的問題:
-申請 B 清寒獎學金需要什麼資格？
+    重構後的問題:
+    申請 B 清寒獎學金需要什麼資格？
 
-例如 (無需改寫):
-對話歷史:
-user: 慈濟醫療法人獎助學金的申請流程是什麼？
-assistant: 申請流程是...
-最新的使用者問題:
-謝謝
+    例如 (無需改寫):
+    對話歷史:
+    user: 慈濟醫療法人獎助學金的申請流程是什麼？
+    assistant: 申請流程是...
+    最新的使用者問題:
+    謝謝
 
-重構後的問題:
-謝謝
-"""
+    重構後的問題:
+    謝謝
+    """
 
     user_prompt = f"""對話歷史:
-{history_str}
+    {history_str}
 
-最新的使用者問題:
-{question}
+    最新的使用者問題:
+    {question}
 
-重構後的問題:
-"""
+    重構後的問題:
+    """
     try:
-        response = openai_client.chat.completions.create(
+        response = await openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -392,21 +393,204 @@ def chat_pipeline(question: str, history: list | None = None):
             result["log_id"] = log_id
             
         return result
-    
+     
 if __name__ == "__main__":
-    # 測試問題
-    # test_question = "有關新北市原住民的獎助學金申請期限是甚麼時候?"
-    
-    # 執行問答流程
-    # final_result = chat_pipeline(test_question)
-    
-    # 帶有歷史紀錄的測試
-    test_history = [
-        {"role": "user", "content": "我想了解原住民的獎學金"},
-        {"role": "assistant", "content": "好的，我們有幾種原住民獎學金，例如「新北市高級中等以上學校原住民學生獎學金」和「桃園市原住民族學生獎助」。您想了解哪一個？"}
-    ]
-    test_question_2 = "那新北市的申請期限是？"
-    final_result_with_history = chat_pipeline(test_question_2, history=test_history)
+    pass
+    # 測試問題       test_question = "有關新北市原住民的獎助學金申請期限是甚麼時候?"             # 執行問答流程         # nal_result = chat_pipeline(test_question)                # 帶有歷史紀錄的測試            story = [                  {"role": "user", "content": "我想了解原住民的獎學金"},                  {"role": "assistant", "content": "好的，我們有幾種原住民獎學金，例如「新北市高級中等以上學校原住民學生獎學金」和「桃園市原住民族學生獎助」。您想了解哪一個？"}         ]     # tes    on_2 = "那新北市的申請期限是？"         # fina    _with_history = chat_pipeline(test_question_2, history=test_history)
+         # 最終結    line 內部打印和記錄         # print(    "--- Pipeline 執行完畢 ---")
 
-    # 最終結果已在 pipeline 內部打印和記錄
-    print("\n--- Pipeline 執行完畢 ---")
+
+# --- Streaming Functions ---
+
+async def generate_answer_stream(question: str, cleaned_contexts: list):
+    """
+    把清理過的 Milvus 檢索結果交給 GPT 生成自然語言回答，並以串流形式回傳。
+    這是一個生成器函式。
+    """
+    # (The logic for preparing context_for_llm is identical to the non-streaming version)
+    from collections import defaultdict
+    grouped = defaultdict(list)
+    source_url_map = {}
+    for c in cleaned_contexts:
+        fname = c.get('source_file', '未知來源')
+        grouped[fname].append(c.get('text', ''))
+        if fname not in source_url_map and c.get('source_url'):
+            source_url_map[fname] = c.get('source_url')
+
+    context_for_llm = ""
+    for fname, texts in grouped.items():
+        title = fname.replace('.md', '').replace('.txt', '')
+        url = source_url_map.get(fname, '')
+        context_for_llm += f"\n---\n來源名稱: {title}\n"
+        if url:
+            context_for_llm += f"來源網址: {url}\n"
+        full_text = "\n".join(texts)
+        context_for_llm += f"內容: {full_text}\n"
+
+    system_prompt = f"""你是一個專業的慈濟大學獎學金問答助理。你的任務是根據提供的「檢索內容」來回答「使用者問題」。
+
+    **輸出格式**
+    你的輸出必須嚴格包含兩部分，並由一個特殊的分隔符號 `|||SOURCES|||` 隔開。
+
+    **第一部分：給使用者的回答**
+    1.  **分析**：仔細分析「檢索內容」，判斷哪些來源與「使用者問題」真正相關。
+    2.  **生成回答**：
+        * 如果有多個獎助學金種類就為每個獎學金或補助建立一個獨立的段落。
+        * 只回答和「使用者問題」直接相關的資訊，避免包含不相關的細節。
+        * 如果「檢索內容」中沒有任何資訊能回答「使用者問題」，請禮貌地告知使用者你無法回答，而不是編造資訊。
+        * 每個段落都必須以分點列出，並必須遵循以下格式獨立呈現：
+            * 標題：該獎學金的「來源名稱」作為標題（使用 Markdown 的 `**粗體**` 格式）。
+            * 內容：根據檢索內容中，以流暢的段落或項目符號來呈現。
+        * 在標題下方，僅使用相關的內容來組織你的回答。
+        * 使用自然的語言和 Markdown 排版（粗體、項目符號等）來美化輸出。
+    3.  **禁止**：不要在這部分包含任何關於資料來源的文字（標題除外）。
+
+    **第二部分：資料來源列表**
+    1.  在分隔符號 `|||SOURCES|||` 之後，你必須列出你在第一部分回答中，所使用到的所有「來源名稱」。
+    2.  格式為一個簡單的、由逗號分隔的字串，例如：`來源名稱一,來源名稱二`。
+    3.  如果根據「檢索內容」無法回答問題，則這部分應為空。
+
+    """
+    user_prompt = f"""
+    使用者問題：
+    {question}
+
+    檢索內容：
+    {context_for_llm}
+    """
+
+    stream = await openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        temperature=0.0,
+        stream=True,
+    )
+    async for chunk in stream:
+        content = chunk.choices[0].delta.content or ""
+        yield content
+
+async def stream_chat_pipeline(question: str, history: list | None = None):
+    """
+    Orchestrates the entire RAG pipeline for streaming responses.
+    This is an async generator that yields different types of events.
+    """
+    start_time = time.time()
+    full_answer = ""
+    original_question = question
+    rephrased_question = question
+    contexts_for_logging = []
+    result_data = {} # Define here to ensure it's available in finally
+
+    try:
+        if history:
+            rephrased_question = await _rephrase_question_with_history(history, question)
+        
+        print(f"\n❓ 最終問題: {rephrased_question} (原始: {original_question})")
+
+        intent = await intent_classification(rephrased_question)
+        print(f"意圖: {intent}")
+
+        if intent == "scholarship":
+            raw_contexts = await retrieve_context(rephrased_question)
+            cleaned_contexts = log_and_clean_contexts(raw_contexts)
+
+            if not cleaned_contexts:
+                no_result_answer = "抱歉，我沒有找到相關的補助或獎學金資訊。"
+                yield {"type": "content", "data": no_result_answer}
+                full_answer = no_result_answer
+                result_data = {"contexts": []} # Set for finally block
+                return
+
+            # Stream the answer from LLM, but filter out the source part
+            llm_stream = generate_answer_stream(rephrased_question, cleaned_contexts)
+            buffer = ""
+            delimiter = "|||SOURCES|||"
+
+            # This loop yields the answer part of the stream and stops before the sources.
+            # It still accumulates the `full_answer` in the background for parsing later.
+            async for chunk in llm_stream:
+                full_answer += chunk
+                buffer += chunk
+
+                if delimiter in buffer:
+                    # Delimiter found. Yield the part before it and stop yielding content.
+                    answer_part, _ = buffer.split(delimiter, 1)
+                    yield {"type": "content", "data": answer_part}
+
+                    # Consume the rest of the stream without yielding content
+                    async for remaining_chunk in llm_stream:
+                        full_answer += remaining_chunk
+                    break
+                else:
+                    # To keep the stream flowing, yield parts of the buffer that we know
+                    # don't contain the full delimiter. We hold back a small part.
+                    if len(buffer) > len(delimiter):
+                        yield_part = buffer[:-len(delimiter)]
+                        yield {"type": "content", "data": yield_part}
+                        buffer = buffer[-len(delimiter):]
+            else:
+                # If the loop finishes without finding the delimiter, yield any remaining buffer content.
+                if buffer:
+                    yield {"type": "content", "data": buffer}
+
+            # Parse the full answer to get cited sources
+            answer_part = full_answer
+            cited_source_names = []
+            if "|||SOURCES|||" in full_answer:
+                parts = full_answer.split("|||SOURCES|||")
+                answer_part = parts[0].strip()
+                source_names_str = parts[1].strip()
+                if source_names_str:
+                    cited_source_names = [name.strip() for name in source_names_str.split(',')]
+            
+            full_answer = answer_part # Update full_answer to be only the user-facing part
+
+            cited_source_names_set = set(cited_source_names)
+            all_cited_contexts = [ctx for ctx in cleaned_contexts if ctx.get('source_file') in cited_source_names_set]
+            contexts_for_logging = all_cited_contexts
+
+            unique_display_contexts = []
+            seen_keys = set()
+            for context in all_cited_contexts:
+                unique_key = context.get('source_url') or context.get('source_file')
+                if unique_key not in seen_keys:
+                    unique_display_contexts.append(context)
+                    seen_keys.add(unique_key)
+            
+            # This is the final payload
+            result_data = {"contexts": unique_display_contexts}
+        
+        else: # Small talk
+            stream = await openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "你是一個慈濟大學的聊天助理，主要提供獎助學金和補助資訊。請自然且簡短地回應，並引導使用者提問相關問題。若問題無關，請禮貌地表示無法回答。"},
+                    {"role": "user", "content": rephrased_question}
+                ],
+                temperature=0.7,
+                stream=True,
+            )
+            async for chunk in stream:
+                content = chunk.choices[0].delta.content or ""
+                full_answer += content
+                yield {"type": "content", "data": content}
+            
+            result_data = {"contexts": []}
+
+    finally:
+        end_time = time.time()
+        latency_ms = (end_time - start_time) * 1000
+        print(f"\n⏱️ 本次問答總耗時: {latency_ms:.2f} ms")
+        
+        # Log to DB (usage is None for streaming)
+        # Note: log_to_db is synchronous. For high concurrency, it should be run in a threadpool.
+        log_id = log_to_db(original_question, rephrased_question, full_answer, contexts_for_logging, latency_ms, None)
+        
+        if log_id:
+            result_data["log_id"] = log_id
+        
+        # Yield the final data packet
+        yield {"type": "final_data", "data": result_data}

@@ -7,12 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Any, Optional
 import psycopg2
+import traceback
+import json
+from fastapi.responses import StreamingResponse
+from answer import stream_chat_pipeline
 
 # Add the project root to the Python path to allow imports from other files
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-# Import the core chat logic
-from answer import chat_pipeline
 
 # --- API Definition ---
 
@@ -38,12 +39,6 @@ class ChatRequest(BaseModel):
     query: str
     history: List[dict] | None = None
 
-class ChatResponse(BaseModel):
-    """Response model for the chatbot's answer."""
-    answer: str
-    contexts: List[Any] # The context can be complex, so using List[Any] for simplicity
-    log_id: int | None = None
-
 class FeedbackRequest(BaseModel):
     """Request model for submitting feedback."""
     log_id: int
@@ -52,31 +47,45 @@ class FeedbackRequest(BaseModel):
 
 # --- API Endpoints ---
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     """
     Receives a user query and conversation history, processes it through the RAG pipeline,
-    and returns the generated answer along with the retrieved contexts.
+    and returns a streaming response of the generated answer.
     """
-    import logging
-    print("--- [INFO] Received new chat request ---")
-    try:
-        print(f"--- [INFO] Processing query: '{request.query}' ---")
-        # Call the chat pipeline function with the query and history
-        result = chat_pipeline(request.query, request.history or [])
-        
-        print("--- [INFO] Successfully processed request and got result from chat_pipeline ---")
-        # The result from chat_pipeline is already a dictionary like:
-        # {"answer": "...", "contexts": [...], "log_id": ...}
-        # FastAPI will automatically convert it to the ChatResponse model.
-        return result
-    except Exception as e:
-        print(f"!!!!!! [ERROR] An exception occurred in chat_endpoint: {e} !!!!!!!")
-        logging.error("Exception in /chat endpoint", exc_info=True)
-        # When debugging on Render, it's often better to see the server crash with a full traceback.
-        # FastAPI's default behavior on an unhandled exception is to log it and return a 500 error.
-        # Re-raising ensures the error is not silently handled and is visible in Render's logs.
-        raise
+    print("--- [INFO] Received new chat stream request ---")
+    
+    async def event_generator():
+        try:
+            print(f"--- [INFO] Processing query for stream: '{request.query}' ---")
+            # The pipeline now yields events (content chunks or final data)
+            async for event in stream_chat_pipeline(request.query, request.history or []):
+                event_type = event.get("type")
+                data = event.get("data")
+
+                if event_type == "content":
+                    # Send a standard message event
+                    # The data is just the text chunk
+                    sse_data = json.dumps({"type": "content", "data": data})
+                    yield f"data: {sse_data}\n\n"
+                
+                elif event_type == "final_data":
+                    # Send a custom named event for the final payload
+                    # The data is the dict with contexts and log_id
+                    sse_data = json.dumps({"type": "final_data", "data": data})
+                    yield f"event: end_stream\ndata: {sse_data}\n\n"
+                    
+                # Yield a small delay to ensure messages are sent separately
+                # await asyncio.sleep(0.01)
+
+        except Exception as e:
+            print(f"!!!!!! [ERROR] An exception occurred in stream: {e} !!!!!!!")
+            traceback.print_exc()
+            # Optionally, send an error event to the client
+            error_message = json.dumps({"type": "error", "data": "An error occurred on the server."})
+            yield f"event: error\ndata: {error_message}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.post("/feedback")
 async def feedback_endpoint(request: FeedbackRequest):

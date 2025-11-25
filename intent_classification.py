@@ -1,8 +1,8 @@
-from openai import OpenAI
+from openai import AsyncOpenAI
 
-client = OpenAI()
+client = AsyncOpenAI()
 
-def intent_classification(question: str) -> str:
+async def intent_classification(question: str) -> str:
     """
     輸入問題，輸出意圖分類：
     - scholarship: 與獎助學金/補助相關
@@ -18,7 +18,7 @@ def intent_classification(question: str) -> str:
     只輸出類別，不要多餘的文字。
     """
 
-    resp = client.chat.completions.create(
+    resp = await client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
         temperature=0
