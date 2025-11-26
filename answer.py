@@ -17,7 +17,7 @@ load_dotenv()
 zilliz_api_key = os.getenv("ZILLIZ_API_KEY")
 api_key = os.getenv("OPENAI_API_KEY")
 openai_client = AsyncOpenAI(api_key=api_key)
-CLUSTER_ENDPOINT="https://in03-a6f08ce2ff778ed.serverless.gcp-us-west1.cloud.zilliz.com:443"
+CLUSTER_ENDPOINT=os.getenv("CLUSTER_ENDPOINT")
 milvus_client = MilvusClient(
                     uri=CLUSTER_ENDPOINT,
                     token=zilliz_api_key,
