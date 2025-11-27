@@ -68,6 +68,9 @@ async function handleUserSubmit(e) {
     const thinkingMessageId = `bot-${Date.now()}`;
     addMessage('<span class="thinking">思考中...</span>', 'bot', thinkingMessageId);
 
+    let fullAnswer = '';
+    let isFirstChunk = true;
+
     try {
         const response = await fetch('/chat', {
             method: 'POST',
@@ -80,14 +83,60 @@ async function handleUserSubmit(e) {
 
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
-        const data = await response.json();
-        updateBotMessage(thinkingMessageId, data.answer, data.contexts, data.log_id);
-        chatHistory.push({ role: 'assistant', content: data.answer });
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+                chatHistory.push({ role: 'assistant', content: fullAnswer });
+                break;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop(); // Keep the last, possibly incomplete, line
+
+            for (const line of lines) {
+                if (line.startsWith('event: end_stream')) {
+                    const dataLine = line.substring(line.indexOf('data: ') + 6);
+                    const eventData = JSON.parse(dataLine);
+                    const finalData = eventData.data;
+                    appendBotMessageAddons(thinkingMessageId, finalData.contexts, finalData.log_id);
+                } else if (line.startsWith('data:')) {
+                    const dataLine = line.substring(6);
+                    const eventData = JSON.parse(dataLine);
+                    const chunk = eventData.data;
+
+                    if (isFirstChunk) {
+                        const messageEl = document.getElementById(thinkingMessageId)?.querySelector('.bot-message');
+                        if (messageEl) messageEl.innerHTML = ''; // Clear "Thinking..."
+                        isFirstChunk = false;
+                    }
+                    
+                    fullAnswer += chunk;
+                    const messageEl = document.getElementById(thinkingMessageId)?.querySelector('.bot-message');
+                    if (messageEl) {
+                        messageEl.innerHTML = marked.parse(fullAnswer);
+                        msgWindow.scrollTop = msgWindow.scrollHeight;
+                    }
+                } else if (line.startsWith('event: error')) {
+                    throw new Error('Server-side error during streaming.');
+                }
+            }
+        }
 
     } catch (error) {
         console.error('API Error:', error);
         const errorMsg = '抱歉，連線時發生錯誤，請稍後再試。';
-        updateBotMessage(thinkingMessageId, errorMsg);
+        const messageContainer = document.getElementById(thinkingMessageId);
+        const messageEl = messageContainer?.querySelector('.bot-message');
+        if (messageEl) {
+            messageEl.innerHTML = errorMsg;
+        } else {
+             updateBotMessage(thinkingMessageId, errorMsg); // Fallback
+        }
         chatHistory.push({ role: 'assistant', content: errorMsg });
     } finally {
         input.focus();
@@ -160,30 +209,27 @@ function addMessage(text, sender, id = null) {
     msgWindow.scrollTop = msgWindow.scrollHeight;
 }
 
-function updateBotMessage(id, answer, contexts = [], log_id = null) {
+function appendBotMessageAddons(id, contexts = [], log_id = null) {
     const messageContainer = document.getElementById(id);
     if (!messageContainer) return;
 
     const messageEl = messageContainer.querySelector('.bot-message');
     if (!messageEl) return;
 
-    let content = marked.parse(answer);
-
-    const isErrorOrThinking = answer.includes('<span class="thinking">') || answer.startsWith('抱歉');
-
     if (contexts && contexts.length > 0) {
-        content += '<div class="contexts"><h4>參考資料：</h4>';
+        const contextsDiv = document.createElement('div');
+        contextsDiv.className = 'contexts';
+        let contextsHTML = '<h4>參考資料：</h4>';
         contexts.forEach(ctx => {
             const fileName = ctx.source_file || '未知來源';
             const url = ctx.source_url || '#';
-            content += `<div class="context-item"><a href="${url}" target="_blank" rel="noopener noreferrer">&#10148; ${fileName}</a></div>`;
+            contextsHTML += `<div class="context-item"><a href="${url}" target="_blank" rel="noopener noreferrer">&#10148; ${fileName}</a></div>`;
         });
-        content += '</div>';
+        contextsDiv.innerHTML = contextsHTML;
+        messageEl.appendChild(contextsDiv);
     }
-    
-    messageEl.innerHTML = content;
 
-    if (!isErrorOrThinking && log_id) {
+    if (log_id) {
         const feedbackDiv = document.createElement('div');
         feedbackDiv.className = 'feedback-buttons';
         feedbackDiv.dataset.logId = log_id;

@@ -1,20 +1,22 @@
 from openai import OpenAI
-from dotenv import load_dotenv
 from pymilvus import DataType
 import json
-import os
-# 載入 .env
-load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=api_key)
+import config
 
-metadata_schema = {
-    "status": ["一般生", "原住民", "中低收入戶", "清寒", "低收入戶", "弱勢學生", "境外生", "國際生", "僑生", "港澳生","身心障礙","交換生"],
-    "subsidy_type": ["海外交流", "獎學金", "獎勵金","助學金","工讀","就學貸款","生活津貼","急難救助","志工服務","社團交流","住宿補助"],
-    "edu_system": ["五專", "二技", "專科", "大學部", "碩士班", "博士班"]
-}
+client = OpenAI(api_key=config.OPENAI_API_KEY)
 
-def extract_filters_from_question(question: str):
+def extract_filters_from_question(question: str, schema_path: str = "metadata_schema.json"):
+    # 從文件加載 metadata schema
+    try:
+        with open(schema_path, 'r', encoding='utf-8') as f:
+            metadata_schema = json.load(f)
+    except FileNotFoundError:
+        print(f"⚠️ Schema 檔案 '{schema_path}' 不存在。")
+        return {}
+    except json.JSONDecodeError:
+        print(f"⚠️ 無法解析 Schema 檔案 '{schema_path}'。")
+        return {}
+
     prompt = f"""
     你是一個的檢索條件生成器。
     你的任務是根據提供的 metadata schema，從問題中找出對應的欄位與值。
@@ -32,8 +34,9 @@ def extract_filters_from_question(question: str):
     問題: {question}
 
     """
+
     resp = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=config.OPENAI_MODEL_NAME,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.0  # 降低隨機性
     )
@@ -47,42 +50,24 @@ def extract_filters_from_question(question: str):
     except Exception as e:
         print("⚠️ JSON parse 失敗:", e)
         return {}
-    
-    # # 轉成 Milvus expr 語法
-    # expr_parts = []
-    # for k, v in filters.items():
-    #     if isinstance(v, list):
-    #         values = ",".join([f"'{x}'" for x in v])
-    #         expr_parts.append(f"{k} in [{values}]")
-    #     else:
-    #         expr_parts.append(f"{k} == '{v}'")
 
-    # expr = " and ".join(expr_parts)
-    # return expr
 
 def filters_to_expr(filters: dict) -> str:
     """
     將 filter dict 轉換成 Milvus expr 語法
-    
     """
     if not filters:
         return ""
     
     expr_parts = []
-
     for key, value in filters.items():
-        if isinstance(value, list) and len(value) > 0 :
-            # 多值就當作array - 用 array_contains_any
-            values_str = ",".join([f'"{v}"' for v in value])
-            expr_parts.append(f'ARRAY_CONTAINS_ANY({key},[{values_str.strip()}])')
-        else:
-            # expr_parts.append(f'{key} == "{value}"') # 單值
-            None
+        # LLM 被指示要回傳陣列，所以我們只處理 value 是非空陣列的格式
+        if isinstance(value, list) and value:
+            # 使用 ARRAY_CONTAINS_ANY 檢查 JSON 欄位是否包含任何指定的值
+            values_str = ", ".join([f'"{v}"' for v in value])
+            expr_parts.append(f'ARRAY_CONTAINS_ANY({key}, [{values_str}])')
 
     return " and ".join(expr_parts)
-
-
-
 
 # 測試
 

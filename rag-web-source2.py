@@ -1,20 +1,15 @@
 # ------------------------------- 載入環境變數 -------------------------------
 import os
 import json
+import config
 
 # ------------------------------- 準備資料 -------------------------------
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from glob import glob
 from openai import OpenAI
-# from pymilvus import model
 from tqdm import tqdm
-from dotenv import load_dotenv
 
-load_dotenv()
-zilliz_api_key = os.getenv("ZILLIZ_API_KEY")
-openai_api_key = os.getenv("OPENAI_API_KEY")
-# gemini_api_key = os.getenv("GEMINI_API_KEY")
-openai_client = OpenAI(api_key=openai_api_key)
+openai_client = OpenAI(api_key=config.OPENAI_API_KEY)
 # gemini_ef = model.dense.GeminiEmbeddingFunction(
 #     model_name='gemini-embedding-001', # 指定您要的模型
 #     api_key=gemini_api_key,
@@ -81,10 +76,9 @@ print(f"Embedding維度: {embedding_dim}, 前10個值: {test_embedding[:10]} ...
 # ========建立資料========
 from pymilvus import MilvusClient, DataType, connections, CollectionSchema, FieldSchema, Collection
 
-CLUSTER_ENDPOINT="https://in03-a6f08ce2ff778ed.serverless.gcp-us-west1.cloud.zilliz.com:443"
 milvus_client = MilvusClient(
-                    uri=CLUSTER_ENDPOINT,
-                    token=zilliz_api_key,
+                    uri=config.CLUSTER_ENDPOINT,
+                    token=config.ZILLIZ_API_KEY,
                     )
 
 # 建立 schema
@@ -93,7 +87,7 @@ schema = milvus_client.create_schema(
     enable_dynamic_field=True
 )
 
-collection_name = "rag5_scholarships_hybrid"
+collection_name = config.MILVUS_COLLECTION
 
 schema.add_field("id", DataType.INT64, is_primary=True)
 schema.add_field("text", DataType.VARCHAR, max_length=10000)

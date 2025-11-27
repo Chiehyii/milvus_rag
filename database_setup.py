@@ -1,19 +1,15 @@
-import os
+import config
 import psycopg2
 from psycopg2 import sql
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
 
 # --- Constants ---
 # It's better to get these from environment variables
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT")
-DB_NAME = os.getenv("DB_NAME")
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-TABLE_NAME = "qa_logs2"
+DB_HOST = config.DB_HOST
+DB_PORT = config.DB_PORT
+DB_NAME = config.DB_NAME
+DB_USER = config.DB_USER
+DB_PASSWORD = config.DB_PASSWORD
+TABLE_NAME = config.DB_TABLE_NAME
 
 def create_database_and_table():
     """
@@ -24,11 +20,11 @@ def create_database_and_table():
     try:
         # Connect to PostgreSQL database
         conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD
+            host=config.DB_HOST,
+            port=config.DB_PORT,
+            dbname=config.DB_NAME,
+            user=config.DB_USER,
+            password=config.DB_PASSWORD
         )
         cursor = conn.cursor()
 
