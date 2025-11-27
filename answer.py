@@ -1,34 +1,30 @@
-import os
 import sys
 import psycopg2
 import time
 import json
-from dotenv import load_dotenv
 import asyncio
 
 from openai import AsyncOpenAI
-from pymilvus import MilvusClient 
+from pymilvus import MilvusClient
+
+# 匯入集中化的設定
+import config
+
 from auto_filter import extract_filters_from_question, filters_to_expr
 from intent_classification import intent_classification
 
-# Load environment variables from .env file
-load_dotenv()
-
-zilliz_api_key = os.getenv("ZILLIZ_API_KEY")
-api_key = os.getenv("OPENAI_API_KEY")
-openai_client = AsyncOpenAI(api_key=api_key)
-CLUSTER_ENDPOINT=os.getenv("CLUSTER_ENDPOINT")
+# 使用集中化的設定來初始化 clients
+openai_client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
 milvus_client = MilvusClient(
-                    uri=CLUSTER_ENDPOINT,
-                    token=zilliz_api_key,
-                    )
-collection_name = "rag5_scholarships_hybrid"
+    uri=config.CLUSTER_ENDPOINT,
+    token=config.ZILLIZ_API_KEY,
+)
 
 async def get_embedding(text):
     """產生文字向量"""
     resp = await openai_client.embeddings.create(
         input=text,
-        model="text-embedding-3-small"
+        model=config.EMBEDDING_MODEL
     )
     return resp.data[0].embedding
 
@@ -51,7 +47,7 @@ async def retrieve_context(question: str, top_k: int=7):
     # milvus_client.search is synchronous; run in a thread to avoid blocking the event loop
     def _milvus_search():
         return milvus_client.search(
-            collection_name=collection_name,
+            collection_name=config.MILVUS_COLLECTION,
             data=[question_embedding],
             search_params=search_params,
             limit=top_k,
@@ -110,13 +106,13 @@ def log_to_db(question, rephrased_question, answer, contexts, latency_ms, usage)
     conn = None
     cursor = None
     try:
-        # # 從環境變數讀取 PostgreSQL 連線資訊
+        # # 使用 config 裡的連線資訊
         conn = psycopg2.connect(
-            host=os.getenv("DB_HOST", "localhost"),
-            port=os.getenv("DB_PORT", "5432"),
-            dbname=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD")
+            host=config.DB_HOST,
+            port=config.DB_PORT,
+            dbname=config.DB_NAME,
+            user=config.DB_USER,
+            password=config.DB_PASSWORD
         )
         # db_url = os.getenv("DATABASE_URL")
         # if not db_url:
@@ -133,8 +129,7 @@ def log_to_db(question, rephrased_question, answer, contexts, latency_ms, usage)
         completion_tokens = usage.completion_tokens if usage else None
         total_tokens = usage.total_tokens if usage else None
 
-        TABLE_NAME = "qa_logs2"
-        insert_query = f"""INSERT INTO {TABLE_NAME} 
+        insert_query = f"""INSERT INTO {config.DB_TABLE_NAME} 
                          (question, rephrased_question, answer, retrieved_contexts, latency_ms, prompt_tokens, completion_tokens, total_tokens)
                          VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id;"""
         
@@ -208,7 +203,7 @@ async def _rephrase_question_with_history(history: list, question: str) -> str:
     """
     try:
         response = await openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=config.OPENAI_MODEL_NAME,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -288,7 +283,7 @@ async def generate_answer_stream(question: str, cleaned_contexts: list):
     """
 
     stream = await openai_client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=config.OPENAI_MODEL_NAME,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
@@ -393,7 +388,7 @@ async def stream_chat_pipeline(question: str, history: list | None = None):
         
         else: # Small talk
             stream = await openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=config.OPENAI_MODEL_NAME,
                 messages=[
                     {"role": "system", "content": "你是一個慈濟大學的聊天助理，主要提供獎助學金和補助資訊。請自然且簡短地回應，並引導使用者提問相關問題。若問題無關，請禮貌地表示無法回答。"},
                     {"role": "user", "content": rephrased_question}

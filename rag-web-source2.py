@@ -1,20 +1,15 @@
 # ------------------------------- 載入環境變數 -------------------------------
 import os
 import json
+import config
 
 # ------------------------------- 準備資料 -------------------------------
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from glob import glob
 from openai import OpenAI
-# from pymilvus import model
 from tqdm import tqdm
-from dotenv import load_dotenv
 
-load_dotenv()
-zilliz_api_key = os.getenv("ZILLIZ_API_KEY")
-openai_api_key = os.getenv("OPENAI_API_KEY")
-# gemini_api_key = os.getenv("GEMINI_API_KEY")
-openai_client = OpenAI(api_key=openai_api_key)
+openai_client = OpenAI(api_key=config.OPENAI_API_KEY)
 # gemini_ef = model.dense.GeminiEmbeddingFunction(
 #     model_name='gemini-embedding-001', # 指定您要的模型
 #     api_key=gemini_api_key,
@@ -81,10 +76,9 @@ print(f"Embedding維度: {embedding_dim}, 前10個值: {test_embedding[:10]} ...
 # ========建立資料========
 from pymilvus import MilvusClient, DataType, connections, CollectionSchema, FieldSchema, Collection
 
-CLUSTER_ENDPOINT="https://in03-a6f08ce2ff778ed.serverless.gcp-us-west1.cloud.zilliz.com:443"
 milvus_client = MilvusClient(
-                    uri=CLUSTER_ENDPOINT,
-                    token=zilliz_api_key,
+                    uri=config.CLUSTER_ENDPOINT,
+                    token=config.ZILLIZ_API_KEY,
                     )
 
 # 建立 schema
@@ -93,7 +87,7 @@ schema = milvus_client.create_schema(
     enable_dynamic_field=True
 )
 
-collection_name = "rag5_scholarships_hybrid"
+collection_name = config.MILVUS_COLLECTION
 
 schema.add_field("id", DataType.INT64, is_primary=True)
 schema.add_field("text", DataType.VARCHAR, max_length=10000)
@@ -157,82 +151,3 @@ query_res = milvus_client.query(
 )
 print(f"\n執行查詢驗證，成功取回 {len(query_res)} 筆資料:")
 print(query_res)
-
-
-
-
-# ------------------------------- 建立 RAG -------------------------------
-# question = "原住民學生可以申請哪種獎助學金？"
-
-# search_res = milvus_client.search(
-#     collection_name=collection_name,
-#     data=[emb_text(question)], # 對問題進行嵌入
-#     limit=10,  # 想要找回幾筆資料
-#     search_params={"metric_type": "IP", "params": {}}, # inner product distance
-#     output_fields=["text", "source_file", "source_path"], # 回傳的欄位
-# )
-# print(f"搜尋結果數量: {len(search_res[0]) if search_res else 0}")
-# # 檔案名稱到網址的對應表
-# file_to_url = {
-#     "慈濟大學高教深耕學.md": "https://yizhu.tcu.edu.tw/?p=3132",
-#     "新北市高級中等以上學校原住民學生獎學金.md": "https://yizhu.tcu.edu.tw/?p=3313",
-#     "校內工讀助學.md": "https://yizhu.tcu.edu.tw/?p=3182"
-# }
-
-# print("\n=== Milvus檢索結果 ===")
-# for i, res in enumerate(search_res[0], 1):
-#     text = res["entity"]["text"]
-#     source_file = res["entity"]["source_file"]
-#     url = file_to_url.get(source_file, "無網址資訊")
-#     distance = res["distance"]
-
-#     print(f"結果 {i} (相似度: {distance:.4f}):")
-#     print(f"內容: {text[:200]}...")  # 只顯示前200字
-#     print(f"來源檔案: [{source_file}]({url})")
-#     print("-" * 50)
-
-# # 建立包含來源的上下文
-# context_with_sources = []
-# for i, res in enumerate(search_res[0], 1):
-#     text = res["entity"]["text"]
-#     source_file = res["entity"]["source_file"]
-#     url = file_to_url.get(source_file, "無網址資訊")
-
-#     if url != "無網址資訊":
-#         context_with_sources.append(f"【參考資料 {i}】\n{text}\n[來源: {url}]\n")
-#     else:
-#         context_with_sources.append(f"【參考資料 {i}】\n{text}\n[來源: {source_file}]\n")
-
-# context = "\n\n".join(context_with_sources)
-
-# # ==============用 LLM 來回答問題=============
-
-# SYSTEM_PROMPT = """
-# 你是一個智慧型 AI 助手。你的任務是根據提供的上下文資訊，找出並回答相關問題。
-# 重要：在回答中引用資訊時，請使用 [來源: 網址] 的格式標註每個引用的來源。
-# 如果有提供網址，請優先使用網址作為來源標註。
-# """
-
-# USER_PROMPT = f"""
-# 請仔細閱讀以下以 <context> 標籤括住的內容，並依據其中的資訊，回答 <question> 標籤中的問題。
-# 請根據以下上下文資訊回答問題，並在每個引用的資訊後面標註來源。
-
-# <context>
-# {context}
-# </context>
-
-# <question>
-# {question}
-# </question>
-
-# 請在回答中包含適當的來源標註。
-# """
-
-# response = openai_client.chat.completions.create(
-#     model="gpt-4o-mini",
-#     messages=[
-#         {"role": "system", "content": SYSTEM_PROMPT},
-#         {"role": "user", "content": USER_PROMPT},
-#     ],
-# )
-# print(response.choices[0].message.content)

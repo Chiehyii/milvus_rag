@@ -1,12 +1,13 @@
 import os
 import sys
+import config
 from fastapi import FastAPI, HTTPException
 import asyncio
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Any, Optional
+from typing import List, Optional
 import psycopg2
 import traceback
 import json
@@ -27,7 +28,7 @@ app = FastAPI(
 # --- Middleware ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=config.ALLOWED_ORIGINS_LIST,  # Use the allowlist from config
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
@@ -100,15 +101,15 @@ async def feedback_endpoint(request: FeedbackRequest):
         cursor = None
         try:
             conn = psycopg2.connect(
-                host=os.getenv("DB_HOST", "localhost"),
-                port=os.getenv("DB_PORT", "5432"),
-                dbname=os.getenv("DB_NAME"),
-                user=os.getenv("DB_USER"),
-                password=os.getenv("DB_PASSWORD")
+                host=config.DB_HOST,
+                port=config.DB_PORT,
+                dbname=config.DB_NAME,
+                user=config.DB_USER,
+                password=config.DB_PASSWORD
             )
             cursor = conn.cursor()
 
-            TABLE_NAME = "qa_logs2"
+            TABLE_NAME = config.DB_TABLE_NAME
             update_query = f"""UPDATE {TABLE_NAME}
                              SET feedback_type = %s, feedback_text = %s
                              WHERE id = %s;"""

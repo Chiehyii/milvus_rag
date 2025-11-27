@@ -1,7 +1,7 @@
 import sqlite3
 import json
 import os
-from dotenv import load_dotenv
+import config
 import asyncio
 
 # New Ragas imports
@@ -12,19 +12,17 @@ from ragas.metrics import Faithfulness, ResponseRelevancy, LLMContextPrecisionWi
 # NOTE: You may need to install new packages: pip install langchain-openai
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
-load_dotenv()
-
 # --- Constants ---
 DB_FILE = "evaluation.db"
-TABLE_NAME = "qa_logs"
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+TABLE_NAME = config.DB_TABLE_NAME
+OPENAI_API_KEY = config.OPENAI_API_KEY
 
 # --- Ragas Components Initialization ---
 # Ragas v0.1+ is designed to work well with Langchain components
 # Use a newer model and enforce JSON output mode to prevent validation errors.
 # This requires a model version that supports JSON mode (e.g., gpt-4o, gpt-4-turbo, gpt-3.5-turbo-0125).
 evaluator_llm = ChatOpenAI(
-    model="gpt-4.1-mini",  
+    model=config.OPENAI_MODEL_NAME,  
     openai_api_key=OPENAI_API_KEY,
     model_kwargs={"response_format": {"type": "json_object"}},
 ) 
