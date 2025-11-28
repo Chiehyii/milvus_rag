@@ -5,10 +5,7 @@ const input = document.getElementById('user-input');
 const sendButton = document.getElementById('send-button');
 const clearButton = document.getElementById('clear-button');
 const helpButton = document.getElementById('help-button');
-const openChatBtn = document.getElementById('open-chat-btn');
 const chatPopup = document.getElementById('chat-popup');
-const backdrop = document.getElementById('backdrop');
-const pageContent = document.getElementById('page-content');
 const feedbackModal = document.getElementById('feedback-modal');
 const feedbackBackdrop = document.getElementById('feedback-backdrop');
 const feedbackForm = document.getElementById('feedback-form');
@@ -57,7 +54,12 @@ function applyTranslations() {
         const key = elem.getAttribute('data-i18n-title');
         elem.title = translations[key] || elem.title;
     });
-    document.title = translations['title'] || document.title;
+    const pageTitleKey = 'title'; // Assuming 'title' key exists in your translation files
+    const pageTitleElement = document.querySelector('.chat-title');
+    if (pageTitleElement) {
+        pageTitleElement.textContent = translations[pageTitleKey] || 'TCU Scholarship Q&A';
+    }
+    document.title = translations[pageTitleKey] || 'TCU Scholarship Q&A';
     console.log("Translations applied.");
 }
 
@@ -68,8 +70,6 @@ helpButton.addEventListener('click', handleGetHelp);
 input.addEventListener('input', () => {
     sendButton.disabled = input.value.trim() === '';
 });
-openChatBtn.addEventListener('click', openChat);
-backdrop.addEventListener('click', closeChat);
 feedbackForm.addEventListener('submit', handleFeedbackSubmit);
 closeFeedbackBtn.addEventListener('click', closeFeedbackModal);
 feedbackBackdrop.addEventListener('click', closeFeedbackModal);
@@ -82,20 +82,6 @@ languageSwitcher.addEventListener('change', (e) => {
 // --- Initial State ---
 sendButton.disabled = true;
 loadLanguage(languageSwitcher.value); // Load initial language
-
-// --- Chat Popup Functions ---
-function openChat() {
-    chatPopup.style.display = 'block';
-    backdrop.style.display = 'block';
-    pageContent.classList.add('blurred');
-    input.focus();
-}
-
-function closeChat() {
-    chatPopup.style.display = 'none';
-    backdrop.style.display = 'none';
-    pageContent.classList.remove('blurred');
-}
 
 // --- Event Handlers ---
 async function handleUserSubmit(e) {

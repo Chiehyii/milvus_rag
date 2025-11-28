@@ -1,5 +1,5 @@
 {
-  "title": "獎助學金問答",
+  "title": "TCU 獎助學金問答",
   "subtitle": "點擊右下角的按鈕開始詢問。",
   "input_placeholder": "請在這裡輸入您的問題...",
   "send_button_title": "Send",
@@ -26,5 +26,6 @@
   "unknown_source": "未知來源",
   "like_button_title": "滿意",
   "dislike_button_title": "不滿意",
-  "feedback_error_alert": "抱歉，提交回饋時發生錯誤。"
+  "feedback_error_alert": "抱歉，提交回饋時發生錯誤。",
+  "chat-notice": "TCU 獎助學金問答可能會出錯，請查證回覆內容。"
 }

@@ -1,5 +1,5 @@
 {
-  "title": "TCU Scholarship Q&A",
+  "title": "TCU Scholarship Chat",
   "subtitle": "Click the button in the bottom right to start asking questions.",
   "input_placeholder": "Please enter your question here...",
   "send_button_title": "Send",
@@ -26,5 +26,6 @@
   "unknown_source": "Unknown source",
   "like_button_title": "Satisfied",
   "dislike_button_title": "Dissatisfied",
-  "feedback_error_alert": "Sorry, there was an error submitting your feedback."
+  "feedback_error_alert": "Sorry, there was an error submitting your feedback.",
+  "chat-notice": "TCU Scholarship Chat may produce errors, please verify the responses."
 }
