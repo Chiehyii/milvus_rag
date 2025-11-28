@@ -11,10 +11,21 @@
 </head>
 <body>
 
+<div class="header-container">
+    <div class="language-switcher-container">
+        <label for="language-switcher">Language:</label>
+        <select id="language-switcher">
+            <option value="zh">繁體中文</option>
+            <option value="en">English</option>
+        </select>
+    </div>
+</div>
+
+
 <div id="page-content">
     <!-- Your main page content can go here -->
-    <h1>獎助學金問答</h1>
-    <p>點擊右下角的按鈕開始詢問。</p>
+    <h1 data-i18n="title">獎助學金問答</h1>
+    <p data-i18n="subtitle">點擊右下角的按鈕開始詢問。</p>
 </div>
 
 <div id="backdrop"></div>
@@ -26,14 +37,14 @@
         <div id="input-area">
             <form id="input-form">
                 <div class="input-wrapper">
-                    <input type="text" id="user-input" placeholder="請在這裡輸入您的問題..." autocomplete="off">
-                    <button type="submit" id="send-button" title="Send">
+                    <input type="text" id="user-input" data-i18n-placeholder="input_placeholder" placeholder="請在這裡輸入您的問題..." autocomplete="off">
+                    <button type="submit" id="send-button" data-i18n-title="send_button_title" title="Send">
                         <span>&#10148;</span>
                     </button>
                 </div>
                 <div class="utility-buttons">
-                    <button type="button" id="clear-button" title="Clear Chat">清除對話</button>
-                    <button type="button" id="help-button" title="Get Help">幫助</button>
+                    <button type="button" id="clear-button" data-i18n="clear_chat_button" data-i18n-title="clear_chat_button_title" title="Clear Chat">清除對話</button>
+                    <button type="button" id="help-button" data-i18n="help_button" data-i18n-title="help_button_title" title="Get Help">幫助</button>
                 </div>
             </form>
         </div>
@@ -42,18 +53,18 @@
 
 <div id="feedback-backdrop"></div>
 <div id="feedback-modal">
-    <h3>提供你的意見</h3>
-    <p>請告訴我們這個回答哪裡不符合你的預期，以幫助我們提升服務品質！</p>
+    <h3 data-i18n="feedback_title">提供你的意見</h3>
+    <p data-i18n="feedback_prompt">請告訴我們這個回答哪裡不符合你的預期，以幫助我們提升服務品質！</p>
     <form id="feedback-form">
-        <textarea id="feedback-textarea" placeholder="例如：答案不正確、資訊不完整、與問題無關..." required></textarea>
+        <textarea id="feedback-textarea" data-i18n-placeholder="feedback_placeholder" placeholder="例如：答案不正確、資訊不完整、與問題無關..." required></textarea>
         <div style="text-align: right;">
-            <button type="button" id="close-feedback-btn">取消</button>
-            <button type="submit">送出</button>
+            <button type="button" id="close-feedback-btn" data-i18n="cancel_button">取消</button>
+            <button type="submit" data-i18n="submit_button">送出</button>
         </div>
     </form>
 </div>
 
-<button id="open-chat-btn">詢問獎助學金</button>
+<button id="open-chat-btn" data-i18n="open_chat_button">詢問獎助學金</button>
 
 <script src="/index.js" type="text/javascript" defer></script>
 

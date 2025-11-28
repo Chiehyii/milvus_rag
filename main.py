@@ -40,6 +40,7 @@ class ChatRequest(BaseModel):
     """Request model for a user's chat query."""
     query: str
     history: List[dict] | None = None
+    lang: Optional[str] = 'zh'
 
 class FeedbackRequest(BaseModel):
     """Request model for submitting feedback."""
@@ -59,9 +60,9 @@ async def chat_endpoint(request: ChatRequest):
     
     async def event_generator():
         try:
-            print(f"--- [INFO] Processing query for stream: '{request.query}' ---")
+            print(f"--- [INFO] Processing query for stream: '{request.query}' in language '{request.lang}' ---")
             # The pipeline now yields events (content chunks or final data)
-            async for event in stream_chat_pipeline(request.query, request.history or []):
+            async for event in stream_chat_pipeline(request.query, request.history or [], request.lang):
                 event_type = event.get("type")
                 data = event.get("data")
 

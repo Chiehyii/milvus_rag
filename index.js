@@ -1,3 +1,4 @@
+// --- DOM Elements ---
 const msgWindow = document.getElementById('message-window');
 const form = document.getElementById('input-form');
 const input = document.getElementById('user-input');
@@ -13,10 +14,52 @@ const feedbackBackdrop = document.getElementById('feedback-backdrop');
 const feedbackForm = document.getElementById('feedback-form');
 const closeFeedbackBtn = document.getElementById('close-feedback-btn');
 const feedbackTextarea = document.getElementById('feedback-textarea');
-let currentFeedbackContext = {};
+const languageSwitcher = document.getElementById('language-switcher');
 
-const initialBotMessage = '你好！我是慈濟大學獎助學金問答助理，請問有什麼可以幫助您的嗎？';
+// --- State ---
 let chatHistory = [];
+let currentFeedbackContext = {};
+let translations = {};
+let currentLang = 'zh';
+
+console.log("index.js script loaded.");
+
+// --- i18n Functions ---
+async function loadLanguage(lang) {
+    console.log(`Attempting to load language: ${lang}`);
+    try {
+        const response = await fetch(`/locales/${lang}.json`);
+        if (!response.ok) {
+            console.error(`Could not load ${lang}.json. Status: ${response.status}`);
+            return;
+        }
+        translations = await response.json();
+        currentLang = lang;
+        applyTranslations();
+        handleClearChat();
+        console.log(`Language ${lang} loaded and applied successfully.`);
+    } catch (error) {
+        console.error('Failed to load language:', error);
+    }
+}
+
+function applyTranslations() {
+    console.log("Applying translations...");
+    document.querySelectorAll('[data-i18n]').forEach(elem => {
+        const key = elem.getAttribute('data-i18n');
+        elem.innerHTML = translations[key] || elem.innerHTML;
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(elem => {
+        const key = elem.getAttribute('data-i18n-placeholder');
+        elem.placeholder = translations[key] || elem.placeholder;
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach(elem => {
+        const key = elem.getAttribute('data-i18n-title');
+        elem.title = translations[key] || elem.title;
+    });
+    document.title = translations['title'] || document.title;
+    console.log("Translations applied.");
+}
 
 // --- Event Listeners ---
 form.addEventListener('submit', handleUserSubmit);
@@ -30,10 +73,15 @@ backdrop.addEventListener('click', closeChat);
 feedbackForm.addEventListener('submit', handleFeedbackSubmit);
 closeFeedbackBtn.addEventListener('click', closeFeedbackModal);
 feedbackBackdrop.addEventListener('click', closeFeedbackModal);
+languageSwitcher.addEventListener('change', (e) => {
+    console.log(`Language switcher changed to: ${e.target.value}`);
+    loadLanguage(e.target.value);
+});
+
 
 // --- Initial State ---
 sendButton.disabled = true;
-handleClearChat(); // Show examples on initial load
+loadLanguage(languageSwitcher.value); // Load initial language
 
 // --- Chat Popup Functions ---
 function openChat() {
@@ -66,7 +114,8 @@ async function handleUserSubmit(e) {
     sendButton.disabled = true;
 
     const thinkingMessageId = `bot-${Date.now()}`;
-    addMessage('<span class="thinking">思考中...</span>', 'bot', thinkingMessageId);
+    const thinkingText = translations['thinking_message'] || 'Thinking...';
+    addMessage(`<span class="thinking">${thinkingText}</span>`, 'bot', thinkingMessageId);
 
     let fullAnswer = '';
     let isFirstChunk = true;
@@ -77,7 +126,8 @@ async function handleUserSubmit(e) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 query: query,
-                history: chatHistory.slice(0, -1)
+                history: chatHistory.slice(0, -1),
+                lang: currentLang 
             })
         });
 
@@ -129,13 +179,11 @@ async function handleUserSubmit(e) {
 
     } catch (error) {
         console.error('API Error:', error);
-        const errorMsg = '抱歉，連線時發生錯誤，請稍後再試。';
+        const errorMsg = translations['error_message'] || 'Sorry, an error occurred while connecting. Please try again later.';
         const messageContainer = document.getElementById(thinkingMessageId);
         const messageEl = messageContainer?.querySelector('.bot-message');
         if (messageEl) {
             messageEl.innerHTML = errorMsg;
-        } else {
-             updateBotMessage(thinkingMessageId, errorMsg); // Fallback
         }
         chatHistory.push({ role: 'assistant', content: errorMsg });
     } finally {
@@ -145,25 +193,26 @@ async function handleUserSubmit(e) {
 
 function handleClearChat() {
     msgWindow.innerHTML = '';
-    addMessage(initialBotMessage, 'bot');
-    chatHistory = [{'role': 'assistant', 'content': initialBotMessage}];
+    const initialMessage = translations['initial_bot_message'] || 'Hello! How can I help you?';
+    addMessage(initialMessage, 'bot');
+    chatHistory = [{'role': 'assistant', 'content': initialMessage}];
     
     if (!msgWindow.querySelector('.example-questions-container')) {
         const exampleContainer = document.createElement('div');
         exampleContainer.className = 'example-questions-container';
         exampleContainer.innerHTML = `
-            <div class="example-question" onclick="askQuestion('提供給五專生原住民的獎助學金有哪些?')">提供給五專生原住民的獎助學金有哪些?</div>
-            <div class="example-question" onclick="askQuestion('校內的工讀甚麼時候開放申請?')">校內的工讀甚麼時候開放申請?</div>
-            <div class="example-question" onclick="askQuestion('家庭意外補助')">家庭意外補助</div>
-            <div class="example-question" onclick="askQuestion('低收入可以申請甚麼?')">低收入可以申請甚麼?</div>
-            <div class="example-question" onclick="askQuestion('大三下要到海外交流和志工服務, 學校有提供甚麼補助嗎?')">大三下要到海外交流和志工服務, 學校有提供甚麼補助嗎?</div>
+            <div class="example-question" onclick="askQuestion('${translations['example_question_1']}')">${translations['example_question_1']}</div>
+            <div class="example-question" onclick="askQuestion('${translations['example_question_2']}')">${translations['example_question_2']}</div>
+            <div class="example-question" onclick="askQuestion('${translations['example_question_3']}')">${translations['example_question_3']}</div>
+            <div class="example-question" onclick="askQuestion('${translations['example_question_4']}')">${translations['example_question_4']}</div>
+            <div class="example-question" onclick="askQuestion('${translations['example_question_5']}')">${translations['example_question_5']}</div>
         `;
         msgWindow.appendChild(exampleContainer);
     }
 }
 
 function handleGetHelp() {
-    alert('聯絡資訊\n\n電話: (03) 856-5301 ext.00000\n郵箱: example@gms.tcu.edu.tw');
+    alert(translations['help_alert'] || 'Contact info not available.');
 }
 
 function askQuestion(question) {
@@ -219,9 +268,9 @@ function appendBotMessageAddons(id, contexts = [], log_id = null) {
     if (contexts && contexts.length > 0) {
         const contextsDiv = document.createElement('div');
         contextsDiv.className = 'contexts';
-        let contextsHTML = '<h4>參考資料：</h4>';
+        let contextsHTML = `<h4>${translations['reference_title'] || 'References:'}</h4>`;
         contexts.forEach(ctx => {
-            const fileName = ctx.source_file || '未知來源';
+            const fileName = ctx.source_file || translations['unknown_source'] || 'Unknown source';
             const url = ctx.source_url || '#';
             contextsHTML += `<div class="context-item"><a href="${url}" target="_blank" rel="noopener noreferrer">&#10148; ${fileName}</a></div>`;
         });
@@ -234,8 +283,8 @@ function appendBotMessageAddons(id, contexts = [], log_id = null) {
         feedbackDiv.className = 'feedback-buttons';
         feedbackDiv.dataset.logId = log_id;
         feedbackDiv.innerHTML = `
-            <button class="feedback-btn like-btn" title="滿意"><i class="fa-regular fa-thumbs-up fa-lg" style="color: #adb1b9;"></i></button>
-            <button class="feedback-btn dislike-btn" title="不滿意"><i class="fa-regular fa-thumbs-down fa-lg" style="color: #adb1b9;"></i></button>
+            <button class="feedback-btn like-btn" title="${translations['like_button_title'] || 'Satisfied'}"><i class="fa-regular fa-thumbs-up fa-lg" style="color: #adb1b9;"></i></button>
+            <button class="feedback-btn dislike-btn" title="${translations['dislike_button_title'] || 'Dissatisfied'}"><i class="fa-regular fa-thumbs-down fa-lg" style="color: #adb1b9;"></i></button>
         `;
         messageContainer.appendChild(feedbackDiv);
         feedbackDiv.addEventListener('click', handleFeedbackClick);
@@ -258,22 +307,18 @@ async function handleFeedbackClick(e) {
     const isDislike = target.classList.contains('dislike-btn');
     const isSelected = target.classList.contains('selected');
 
-    // If the clicked button is already selected, unselect it and clear feedback
     if (isSelected) {
         target.classList.remove('selected');
-        await sendFeedback(logId, null, null); // Clear both type and text
+        await sendFeedback(logId, null, null); 
     } else {
-        // Unselect the other button if it's selected
         if (isDislike) {
             likeBtn.classList.remove('selected');
         } else {
             dislikeBtn.classList.remove('selected');
         }
         
-        // Select the clicked one
         target.classList.add('selected');
 
-        // If dislike is chosen, save it immediately then open modal
         if (isDislike) {
             await sendFeedback(logId, 'dislike');
             openFeedbackModal(logId);
@@ -303,7 +348,6 @@ async function handleFeedbackSubmit(e) {
 
     if (!logId) return;
 
-    // Even if the text is empty, we proceed to log the 'dislike'
     await sendFeedback(logId, 'dislike', feedbackText);
     
     closeFeedbackModal();
@@ -325,7 +369,6 @@ async function sendFeedback(logId, feedbackType, feedbackText = null) {
         console.log('Feedback submitted successfully.');
     } catch (error) {
         console.error('Feedback submission error:', error);
-        // Optionally inform the user
-        // alert('抱歉，提交回饋時發生錯誤。');
+        // alert(translations['feedback_error_alert'] || 'Sorry, there was an error submitting your feedback.');
     }
 }
