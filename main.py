@@ -90,6 +90,55 @@ async def chat_endpoint(request: ChatRequest):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+# --- Line Bot Setup ---
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from fastapi import Request, Header
+
+line_bot_api = LineBotApi(config.LINE_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(config.LINE_CHANNEL_SECRET)
+
+@app.post("/callback")
+async def callback_endpoint(request: Request, x_line_signature: str = Header(None)):
+    """
+    Line Bot Webhook Endpoint
+    """
+    body = await request.body()
+    body_str = body.decode('utf-8')
+    
+    try:
+        # 驗證簽章
+        if not handler.parser.signature_validator.validate(body_str, x_line_signature):
+             raise InvalidSignatureError
+        
+        # 解析事件
+        events = handler.parser.parse(body_str, x_line_signature)
+        
+        for event in events:
+            if isinstance(event, MessageEvent) and isinstance(event.message, TextMessage):
+                user_msg = event.message.text
+                reply_token = event.reply_token
+                
+                print(f"--- [Line Bot] Processing: {user_msg} ---")
+                
+                # 執行 RAG
+                full_response = ""
+                async for chunk in stream_chat_pipeline(user_msg, history=[], lang='zh'):
+                    if chunk.get("type") == "content":
+                        full_response += chunk.get("data", "")
+                
+                # 回覆訊息
+                line_bot_api.reply_message(reply_token, TextSendMessage(text=full_response))
+                
+    except InvalidSignatureError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    except Exception as e:
+        print(f"Error processing Line event: {e}")
+        traceback.print_exc()
+        return "Error"
+    
+    return "OK"
 @app.post("/feedback")
 async def feedback_endpoint(request: FeedbackRequest):
     """

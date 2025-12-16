@@ -14,6 +14,10 @@ ZILLIZ_API_KEY = os.getenv("ZILLIZ_API_KEY")
 CLUSTER_ENDPOINT = os.getenv("CLUSTER_ENDPOINT")
 MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION", "rag5_scholarships_hybrid_bm25")
 
+# --- Line Bot ---
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+
 # --- PostgreSQL Database ---
 DB_TABLE_NAME = os.getenv("DB_TABLE_NAME", "qa_logs2")
 DB_HOST = os.getenv("DB_HOST", "localhost")

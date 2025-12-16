@@ -41,3 +41,6 @@ sentence-transformers  # embedding 常用，如 all-MiniLM
 
 # --- Database ---
 psycopg2-binary
+
+# --- Line Bot ---
+line-bot-sdk
