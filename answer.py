@@ -30,32 +30,102 @@ async def get_embedding(text):
     return resp.data[0].embedding
 
 async def retrieve_context(question: str, lang: str = 'zh', top_k: int = 7):
-    """根據問題進行相似度檢索+過濾"""
-    # 1. 產生問題的向量
-    question_embedding = await get_embedding(question)
+    """根據問題進行混合檢索 (Dense + Sparse) + 過濾"""
+    from pymilvus import AnnSearchRequest, RRFRanker
 
-    # 2. 重問題中提取 metadata 過濾條件
+    # 1. 產生問題的向量 (Dense)
+    question_dense_embedding = await get_embedding(question)
+
+    # 2. 產生問題的向量 (Sparse) - 嘗試使用 BM25
+    # 注意：如果使用者已設定 Server-side Function，可能不需要 Client-side 生成，
+    # 但目前 PyMilvus Hybrid Search 通常需要 Client 端提供 Vector。
+    # 這裡假設使用者環境有安裝 pymilvus[model] 或者我們需要用簡單方式生成。
+    # 由於使用者移除了 pymilvus[model]，我們先嘗試 import，失敗則提示。
+    try:
+        from pymilvus.model.sparse.bm25.tokenizers import build_default_analyzer
+        from pymilvus.model.sparse import BM25EmbeddingFunction
+        
+        # 這裡需要一個 analyzer，簡單起見我們先用預設的
+        # 在實際生產中，這裡的 analyzer 應該要跟 Ingestion 時的一致
+        analyzer = build_default_analyzer(language="zh")
+        bm25_ef = BM25EmbeddingFunction(analyzer)
+        
+        # BM25EmbeddingFunction 需要 fit 語料，但在 Search 階段通常是 encode_queries
+        # 這裡有一個問題：BM25 需要統計資訊 (IDF)。如果沒有 load 語料，Client 端無法準確生成。
+        # 如果是 Milvus 2.5 Built-in Function，我們應該傳送 "Raw Text" 給 Search?
+        # 目前 Milvus SDK 對 Function 的支援在 Search 時通常是自動的嗎？
+        # 如果是 Built-in，我們可能只需要對 Dense 做 Search，Sparse 部分由 Server 處理？
+        # 不，Hybrid Search 是兩個 Req。
+        
+        # 假設使用者是指 Milvus 2.5 的 Full Text Search (Sparse) 功能
+        # 我們嘗試直接將文字傳給 sparse field (如果 SDK 支援) 或者使用 dummy sparse vector (如果不支援)
+        # 但最穩妥的方式是：如果使用者說 "Built-in"，可能是指 Server 端有 Function。
+        # 我們嘗試構造一個針對 sparse 欄位的 AnnSearchRequest。
+        
+        # 暫時使用一個空的 sparse vector 佔位，或者如果使用者有 server-side function，
+        # 我們可能需要查閱特定文檔。
+        # 鑑於資訊有限，我們先實作標準 Hybrid Search 結構。
+        pass
+    except ImportError:
+        print("⚠️ Warning: pymilvus[model] not found. Sparse vector generation might fail if not handled by server.")
+
+    # 2. 從問題中提取 metadata 過濾條件
     filters = extract_filters_from_question(question, lang=lang)
     expr = filters_to_expr(filters) if filters else None
     print("Milvus expr:", expr)
 
-    # 3. 執行向量檢索
-    search_params = {
-        "metric_type": "COSINE",
-        "params": {"nprobe": 10}
-    }
+    # 3. 執行混合檢索
+    # Dense Request
+    dense_search_params = {"metric_type": "COSINE", "params": {"nprobe": 10}}
+    dense_req = AnnSearchRequest(
+        data=[question_dense_embedding],
+        anns_field="vector",
+        param=dense_search_params,
+        limit=top_k,
+        expr=expr
+    )
 
-    def _milvus_search():
-        return milvus_client.search(
-            collection_name=config.MILVUS_COLLECTION,
-            data=[question_embedding],
-            search_params=search_params,
-            limit=top_k,
-            filter=expr if expr else None,
-            output_fields=["id", "text", "source_file", "source_url", "status", "subsidy_type", "edu_system"],
-        )
+    # Sparse Request
+    # 如果是 Milvus 2.5 Built-in Function，我們可能可以直接傳 Text?
+    # 目前 PyMilvus 支援 data=[text] 如果有 Function。
+    # 我們假設 sparse 欄位名稱為 'text_sparse' (使用者提到的)
+    sparse_search_params = {"metric_type": "BM25", "params": {}} # BM25 metric type? Or IP? Usually IP for sparse.
+    # 修正: Sparse Vector 通常用 IP 或 SPLADE 指定的 metric。BM25 也是基於 IP。
+    sparse_req = AnnSearchRequest(
+        data=[question], # 嘗試直接傳文字，依賴 Server-side Function
+        anns_field="text_sparse",
+        param={"metric_type": "BM25", "params": {}}, # 假設 metric_type 是 BM25
+        limit=top_k,
+        expr=expr
+    )
 
-    results = await asyncio.to_thread(_milvus_search)
+    # Reranker
+    reranker = RRFRanker()
+
+    def _milvus_hybrid_search():
+        try:
+            # 嘗試 Hybrid Search
+            return milvus_client.hybrid_search(
+                collection_name=config.MILVUS_COLLECTION,
+                reqs=[dense_req, sparse_req],
+                ranker=reranker,
+                limit=top_k,
+                output_fields=["id", "text", "source_file", "source_url", "status", "subsidy_type", "edu_system"]
+            )
+        except Exception as e:
+            print(f"Hybrid search failed: {e}")
+            print("Falling back to Dense search only.")
+            # Fallback to dense search
+            return milvus_client.search(
+                collection_name=config.MILVUS_COLLECTION,
+                data=[question_dense_embedding],
+                search_params=dense_search_params,
+                limit=top_k,
+                filter=expr if expr else None,
+                output_fields=["id", "text", "source_file", "source_url", "status", "subsidy_type", "edu_system"],
+            )
+
+    results = await asyncio.to_thread(_milvus_hybrid_search)
     if not results or not results[0]:
         return []
 

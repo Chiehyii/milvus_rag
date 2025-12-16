@@ -12,7 +12,7 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
 # --- Zilliz / Milvus ---
 ZILLIZ_API_KEY = os.getenv("ZILLIZ_API_KEY")
 CLUSTER_ENDPOINT = os.getenv("CLUSTER_ENDPOINT")
-MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION", "rag5_scholarships_hybrid")
+MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION", "rag5_scholarships_hybrid_bm25")
 
 # --- PostgreSQL Database ---
 DB_TABLE_NAME = os.getenv("DB_TABLE_NAME", "qa_logs2")
